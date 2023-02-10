@@ -25,7 +25,7 @@ const BufferManager = function() {
 			renderConstruction.push({ char: [], fg: [], bg: [], });
 			i++;
 		} while (i < screenSize);
-		console.log(`render construction took ${Date.now() - start}ms`);
+		// console.log(`render construction took ${Date.now() - start}ms`);
 	}
 	let screenWidth, screenSize;
 	let renderedChar, renderedFg, renderedBg, renderConstruction;
@@ -62,8 +62,8 @@ const BufferManager = function() {
 		const bgChanged = bg != lastRenderData.bg;
 		if (fgChanged || bgChanged) {
 			if (!fg || !bg) currentRender.push(resetColorString);
-			if (fgChanged) currentRender.push(fgHexToString(getHex(fg)) + ' at x: ' + x + ', y: ' + y);
-			if (bgChanged) currentRender.push(bgHexToString(getHex(bg)) + ' at x: ' + x + ', y: ' + y);
+			if (fgChanged) currentRender.push(fgHexToString(getHex(fg)));
+			if (bgChanged) currentRender.push(bgHexToString(getHex(bg)));
 		}
 		const moveCursorNecessary = !(lastRenderData.y == y && lastRenderData.x == x - 1);
 		if (moveCursorNecessary) currentRender.push(moveCursorString(x, y));
@@ -71,19 +71,37 @@ const BufferManager = function() {
 		lastRenderData = { x: x, y: y, fg: fg, bg: bg };
 	}
 
-	const reportConstructionInArea = function() {
-		const buffers = groups[activeGroup].values();
-		console.log(buffers);
+	const reportConstructionInArea = function(x, y, w, h) {
+		// const buffers = groups[activeGroup].values();
+		// const firstBuffer = buffers.next().value;
+		// const x = firstBuffer.x;
+		// const y = firstBuffer.y;
+		for (let i = 0; i < h; i++) {
+			for (let j = 0; j < w; j++) {
+				const screenX = x + j;
+				const screenY = y + i;
+				const screenIndex = screenY * screenWidth + screenX;
+				console.log('x: ' + screenX + ', y: ' + screenY + ' index: ' + screenIndex);
+				console.log(renderConstruction.at(screenIndex));
+				console.log('-------');
+			}
+		}
 	}
 
 	this.requestDraw = function(char, fg, bg, x, y, zIndex) {
 		addToRenderOutput(char, fg, bg, x, y);
-
+		const screenIndex = y * screenWidth + x;
+		const construction = renderConstruction.at(screenIndex);
+		const charConstruction = construction.char;
+		if (!charConstruction.length)
+			charConstruction.push(char);
 	};
 	this.executeRenderOutput = function() {
+		process.stdout.write(currentRender.join(''));
+		process.stdout.cursorTo(1, 3);
+		console.log(resetColorString);
 		console.log(currentRender);
-		reportConstructionInArea();
-		setTimeout(() => process.stdout.write(currentRender.join('')), 1000);
+		reportConstructionInArea(10, 2, 5, 1);
 	}
 }
 

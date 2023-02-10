@@ -10,14 +10,16 @@ const manager = new BufferManager();
 const hex = manager.hex;
 
 async function test1() {
-	const buffer = manager.createBuffer(Math.floor(columns / 2), 2, 5, 2);
+	const x = 10;
+	const y = 2;
+	const buffer = manager.createBuffer(x, y, 5, 1);
 	manager.setFg(hex(0xfe0000));
 	manager.setBg(hex(0x222222));
-	buffer.cursorTo(1, 1);
-	buffer.write('hello');
 	buffer.write('hello');
 	buffer.render();
-	// buffer.draw('x', 2, 2);
+
+	await wait(1000);
+	const second = manager.createBuffer(x, y, 5, 1);
 
 	await wait(1000);
 	stdout.cursorTo(0, rows - 2);
