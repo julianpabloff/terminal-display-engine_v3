@@ -9,12 +9,14 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 	this.zIndex = zIndex;
 	this.hidden = false;
 
-	const currentCode = new Uint16Array(this.size);
-	const currentFg = new Uint32Array(this.size);
-	const currentBg = new Uint32Array(this.size);
-	const previousCode = new Uint16Array(this.size);
-	const previousFg = new Uint32Array(this.size);
-	const previousBg = new Uint32Array(this.size);
+	// Canvas: the array that you are drawing on that you eventually render to this buffer
+	// Current: what's already been rendered on this buffer
+	const canvasCodes = new Uint16Array(this.size);
+	const canvasFGs = new Uint32Array(this.size);
+	const canvasBGs = new Uint32Array(this.size);
+	const currentCodes = new Uint16Array(this.size);
+	const currentFGs = new Uint32Array(this.size);
+	const currentBGs = new Uint32Array(this.size);
 	let changed = false;
 
 	// Writing to buffer
@@ -27,14 +29,14 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 		let i = index;
 		let stringIndex = 0;
 		while (stringIndex < stringLength && i < this.size) {
-			currentCode[i] = string.charCodeAt(stringIndex);
-			currentFg[i] = fg;
-			currentBg[i] = bg;
+			canvasCodes[i] = string.charCodeAt(stringIndex);
+			canvasFGs[i] = fg;
+			canvasBGs[i] = bg;
 			stringIndex++;
 			i++;
 		};
 		cursorIndex = index + string.length;
-		if (cursorIndex > this.size) cursorIndex = 0;
+		if (cursorIndex >= this.size) cursorIndex = 0;
 		changed = true;
 	}
 	this.write = function(string, fg = manager.fg, bg = manager.bg) {
@@ -49,24 +51,31 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 
 	this.render = function() {
 		if (!changed || this.hidden) return;
-		// console.log('buffer size: ' + this.size);
-		// console.log(currentCode);
 		manager.createRenderOutput();
 		let i = 0;
 		do { // Loop through buffer
-			const code = currentCode.at(i);
-			const fg = currentFg.at(i);
-			const bg = currentBg.at(i);
-			const prevCode = previousCode.at(i);
-			const prevFg = previousFg.at(i);
-			const prevBg = previousBg.at(i);
+			const code = canvasCodes[i];
+			const fg = canvasFGs[i];
+			const bg = canvasBGs[i];
+			const currentCode = currentCodes[i];
+			const currentFg = currentFGs[i];
+			const currentBg = currentBGs[i];
 			const screenX = this.x + (i % this.width);
 			const screenY = this.y + Math.floor(i / this.width);
 
-			if (code != prevCode || fg != prevFg || bg != prevBg)
-				manager.requestDraw(code, fg, bg, screenX, screenY, this.zIndex);
+			if (code != currentCode || fg != currentFg || bg != currentBg)
+				manager.requestDraw(code, fg, bg, screenX, screenY, this.id, this.zIndex);
+
+			currentCodes[i] = code;
+			currentFGs[i] = fg;
+			currentBGs[i] = bg;
+			canvasCodes[i] = 0;
+			canvasFGs[i] = 0;
+			canvasBGs[i] = 0;
 			i++;
-		} while (i < this.size);
+		} while (i < 1);
+		//} while (i < this.size);
+		//console.log(currentCodes);
 		manager.executeRenderOutput();
 	}
 }
