@@ -40,6 +40,12 @@ const BufferManager = function() {
 	// [opacity] [       24 bit color        ]
 	const getOpacity = code => code >> 24;
 	const getHex = code => code & 0xffffff;
+	const getRGBA = code => {
+		const hex = getHex(code);
+		return { r: hex >> 16, g: (hex >> 8) & 0xFF, b: hex & 0xFF, a: getOpacity(code) };
+	};
+	// meant to take in decimal values of RGB during opacity calculations
+	const setRGBA = rgba => (Math.round(rgba.a) << 24) + (Math.round(rgba.r) << 16) + (Math.round(rgba.g) << 8) + Math.round(rgba.b);
 
 	this.fg = 0;
 	this.bg = 0;
@@ -52,17 +58,14 @@ const BufferManager = function() {
 	this.hex = (hex, opacity = 100) => hex + (opacity << 24);
 	this.rgba = (r, g, b, a = 100) => (a << 24) + (r << 16) + (g << 8) + b;
 
+	const hexToRGB = hex => { return {r: hex >> 16, g: (hex >> 8) & 0xFF, b: hex & 0xFF} };
+	const rgbToHex = (r, g, b) => (r << 16) + (g << 8) + b;
 	const fgHexToString = hex => '\x1b[38;2;' + (hex >> 16).toString() + ';' + ((hex >> 8) & 0xFF).toString() + ';' + (hex & 0xFF).toString() + 'm';
 	const bgHexToString = hex => '\x1b[48;2;' + (hex >> 16).toString() + ';' + ((hex >> 8) & 0xFF).toString() + ';' + (hex & 0xFF).toString() + 'm';
 	const resetColorString = '\x1b[0m';
 	const moveCursorString = (x, y) => '\x1b[' + (y + 1).toString() + ';' + (x + 1).toString() + 'H';
 
 	// Color conversion
-	const hexToRGB = hex => { return {r: hex >> 16, g: (hex >> 8) & 0xFF, b: hex & 0xFF} };
-	const hexToString = hex => {
-		const rgb = hexToRGB(hex);
-		return '\x1b[38;2;' + rgb.r.toString() + ';' + rgb.g.toString() + ';' + rgb.b.toString() + 'm';
-	}
 	// 256 color terminals
 	const hexTo256Color = hex => {
 		const options = [0, 95, 135, 175, 215, 255];
@@ -133,9 +136,17 @@ const BufferManager = function() {
 	const hexDebugString = color => {
 		if (!color) return '[none]';
 		const hex = getHex(color);
-		const ANSI = fg256ToString(hexTo256Color(hex));
-		return ANSI + '#' + getHex(color).toString(16) + resetColorString;
+		const ANSI = fgHexToString(hex);
+		const hexString = hex.toString(16);
+		return ANSI + '#' + '0'.repeat(6 - hexString.length) + hexString + resetColorString;
 	};
+	// const hexDebugString = color => {
+	// 	if (!color) return '[none]';
+	// 	const hex = getHex(color);
+	// 	// const ANSI = fg256ToString(hexTo256Color(hex));
+	// 	const ANSI = fgHexToString(hex);
+	// 	return ANSI + '#' + getHex(color).toString(16) + resetColorString;
+	// };
 
 	this.requestDraw = function(char, fg, bg, x, y, id, zIndex) {
 		console.log('requesting draw for buffer #' + id);
@@ -158,11 +169,12 @@ const BufferManager = function() {
 		let outputChar = 32;
 		let outputFg = 0;
 		let outputBg = 0;
-		let fgStack = [];
+		let fgStackIndex = 0;
 		let bgStack = [];
 		let fgOpacityAConcern = false;
 		let bgOpacityAConcern = false;
 		console.log();
+		let index = 0;
 		datapoint.forEach(item => {
 			for (const key of Object.keys(item)) {
 				const logArray = ['   ', key];
@@ -176,33 +188,103 @@ const BufferManager = function() {
 			
 			const fg = item.fg;
 			const bg = item.bg;
-			if (item.char == 32) {
-			
-			} else if (fg) { // only render the char if there's a fg
-				outputChar = item.char;
-				if (getOpacity(fg) < 100) {
-					if (!fgOpacityAConcern) fgOpacityAConcern = true;
-				} else {
-					fgStack = [];
-					fgOpacityAConcern = false;
+			if (bg && getOpacity(bg)) {
+				if (getOpacity(bg) == 100) {
+					bgStack = [bg];
+					bgOpacityAConcern = false;
+				} else if (!bgOpacityAConcern) {
+					// if (!bgStack.length) bgStack.push(100 << 24);
+					bgOpacityAConcern = true;
 				}
-				if (fgOpacityAConcern) fgStack.push(fg);
-				outputFg = fg;
+				if (bgOpacityAConcern) bgStack.push(bg);
 			}
-			outputBg = bg;
+			if (item.char == 32) {
+
+			} else if (fg && getOpacity(fg)) { // only render the char if there's a fg
+				fgStackIndex = index;
+				fgOpacityAConcern = getOpacity(fg) < 100;
+				outputFg = fg;
+				outputChar = item.char;
+			}
+			index++;
 		});
-		const fgStackDebugArray = [];
-		fgStack.forEach(fg => fgStackDebugArray.push(hexDebugString(fg), getOpacity(fg)));
-		console.log('fgStack', ...fgStackDebugArray);
-		console.log('bgStack', bgStack);
+		console.log('fgStackIndex', fgStackIndex);
+		const bgStackDebugArray = [];
+		bgStack.forEach(bg => bgStackDebugArray.push(hexDebugString(bg), getOpacity(bg)));
+		console.log('bgStack', ...bgStackDebugArray);
+
+		// these layering algos assume the bottom opacity is 100, or else what would the top color fade to?
+		const layerColorsHex = function(topHex, opacity, bottomHex) {
+			const topRGB = hexToRGB(topHex);
+			const bottomRGB = hexToRGB(bottomHex);
+			const calcOpacityDelta = (top, bottom) => Math.floor((bottom - top) * (100 - opacity) / 100);
+			return rgbToHex(
+				topRGB.r + calcOpacityDelta(topRGB.r, bottomRGB.r),
+				topRGB.g + calcOpacityDelta(topRGB.g, bottomRGB.g),
+				topRGB.b + calcOpacityDelta(topRGB.b, bottomRGB.b)
+			);
+		}
+		// meant to be used repeatedly over the hex algo above, since this one doesn't round
+		const layerColorsRGBA = function(topRGBA, bottomRGBA) {
+			const opacity = topRGBA.a;
+			const calcOpacityDelta = (top, bottom) => (bottom - top) * (100 - opacity) / 100;
+			return {
+				r: topRGBA.r + calcOpacityDelta(topRGBA.r, bottomRGBA.r),
+				g: topRGBA.g + calcOpacityDelta(topRGBA.g, bottomRGBA.g),
+				b: topRGBA.b + calcOpacityDelta(topRGBA.b, bottomRGBA.b),
+				a: 100
+			}
+		}
+
+		console.log();
+		if (bgOpacityAConcern) {
+			let i;
+			let outputFgRGBA;
+			let outputBgRGBA;
+			let calcFgOpacity = false;
+			const insertFgIntoOpacityCalc = function() {
+				outputFgRGBA = layerColorsRGBA(getRGBA(outputFg), outputBgRGBA);
+				outputFg = setRGBA(outputFgRGBA); // only needs to be done at the end, here for debugging purposes
+				console.log('outputFg', hexDebugString(outputFg), outputFgRGBA);
+				calcFgOpacity = true;
+			}
+			if (getOpacity(bgStack[0]) == 100) {
+				i = 1;
+				outputBg = bgStack[0];
+				outputBgRGBA = getRGBA(bgStack[0]);
+				if (fgOpacityAConcern) insertFgIntoOpacityCalc();
+			} else {
+				i = 0;
+				outputBg = 100 << 24;
+				outputBgRGBA = { r: 0, g: 0, b: 0, a: 100 };
+			}
+			console.log('outputBg', 'index: -', hexDebugString(outputBg), outputBgRGBA);
+			do { // loop through bgStack
+				outputBgRGBA = layerColorsRGBA(getRGBA(bgStack[i]), outputBgRGBA);
+				outputBg = setRGBA(outputBgRGBA); // only needs to be done at the end, here for debugging purposes
+				console.log('outputBg', 'index: ' + i, hexDebugString(outputBg), outputBgRGBA);
+				if (calcFgOpacity) {
+					// Layers clear backgrounds over the foreground color
+					outputFgRGBA = layerColorsRGBA(getRGBA(bgStack[i]), outputFgRGBA);
+					outputFg = setRGBA(outputFgRGBA); // only needs to be done at the end, here for debugging purposes
+					console.log('outputFg', hexDebugString(outputFg), outputFgRGBA);
+				}
+				if (fgOpacityAConcern && i == fgStackIndex) insertFgIntoOpacityCalc();
+				i++;
+			} while (i < bgStack.length);
+		} else {
+			outputBg = bgStack[0];
+			if (fgOpacityAConcern) {
+				outputFg = layerColorsHex(getHex(outputFg), getOpacity(outputFg), getHex(outputBg));
+			}
+		}
+
 		console.log();
 		console.log('outputChar', outputChar);
-		if (fgOpacityAConcern) console.log('outputFg [TO BE DETERMINED]');
-		else console.log('outputFg', hexDebugString(outputFg));
-		if (bgOpacityAConcern) console.log('outputBg [TO BE DETERMINED]');
-		else console.log('outputBg', hexDebugString(outputBg));
-
-		//addToRenderOutput(char, fg, bg, x, y);
+		console.log('outputFg', hexDebugString(outputFg), getOpacity(outputFg), 'calculated:', fgOpacityAConcern);
+		console.log('outputBg', hexDebugString(outputBg), getOpacity(outputBg), 'calculated:', bgOpacityAConcern);
+		console.log('\n' + fgHexToString(getHex(outputFg)) + bgHexToString(getHex(outputBg)) + '    ' + String.fromCharCode(outputChar).repeat(4) + '    ' + resetColorString);
+		// addToRenderOutput(char, fg, bg, x, y);
 		console.log();
 	};
 	this.executeRenderOutput = function() {

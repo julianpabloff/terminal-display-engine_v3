@@ -14,18 +14,18 @@ async function test1() {
 	const x = 10;
 	const y = 2;
 	const buffer = manager.createBuffer(x, y, 5, 1, 2);
-	//buffer.write('hello', hex(0xfe0000, 50), 0);
-	buffer.write('hello', 0, 0);
+	buffer.write(' ello', hex(0xfe0000, 50), hex(0x3456ee, 40));
+	// buffer.write('hello', 0, 0);
 	buffer.render();
 
 	await wait(1000);
 	const second = manager.createBuffer(x, y, 5, 1, 1);
-	second.write('blehh', hex(0x3470aa), hex(0x444444));
+	second.write('blehh', hex(0x3470aa, 80), hex(0x444444, 100));
 	second.render();
 
 	await wait(1000);
 	const third = manager.createBuffer(x, y, 5, 1, 3);
-	third.write('     ', hex(0x349912), hex(0x11ee78, 50));
+	third.write('     ', hex(0xeeeeee, 50), hex(0x11aa78, 60));
 	third.render();
 
 	/*
