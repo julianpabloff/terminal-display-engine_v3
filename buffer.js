@@ -35,7 +35,7 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 			stringIndex++;
 			i++;
 		};
-		cursorIndex = index + string.length;
+		cursorIndex += stringLength;
 		if (cursorIndex >= this.size) cursorIndex = 0;
 		changed = true;
 	}
@@ -49,8 +49,9 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 		return this;
 	}
 
-	this.render = function() {
+	this.render = function(debug = false) {
 		if (!changed || this.hidden) return;
+		const start = Date.now();
 		manager.createRenderOutput();
 		let i = 0;
 		do { // Loop through buffer
@@ -63,8 +64,10 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 			const screenX = this.x + (i % this.width);
 			const screenY = this.y + Math.floor(i / this.width);
 
-			if (code != currentCode || fg != currentFg || bg != currentBg)
-				manager.requestDraw(code, fg, bg, screenX, screenY, this.id, this.zIndex);
+			if (code != currentCode || fg != currentFg || bg != currentBg) {
+				if (debug) manager.requestDrawDebug(code, fg, bg, screenX, screenY, this.id, this.zIndex);
+				else manager.requestDraw(code, fg, bg, screenX, screenY, this.id, this.zIndex);
+			}
 
 			currentCodes[i] = code;
 			currentFGs[i] = fg;
@@ -73,10 +76,17 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 			canvasFGs[i] = 0;
 			canvasBGs[i] = 0;
 			i++;
-		} while (i < 1);
-		//} while (i < this.size);
-		//console.log(currentCodes);
+		} while (i < this.size && !debug);
+		// console.log(currentCodes);
 		manager.executeRenderOutput();
+		// process.stdout.cursorTo(0, 0);
+		// console.log('render took ' + (Date.now() - start) + 'ms');
+	}
+
+	this.fill = function(color) {
+		canvasBGs.fill(color);
+		changed = true;
+		return this;
 	}
 }
 

@@ -23,17 +23,20 @@ const BufferManager = function() {
 		renderedFg = new Uint32Array(screenSize);
 		renderedBg = new Uint32Array(screenSize);
 		const start = Date.now();
-		renderConstruction = [];
 		// screenConstruction and screenCurrent
+		screenCodes = new Uint16Array(screenSize);
+		screenFGs = new Uint32Array(screenSize);
+		screenBGs = new Uint32Array(screenSize);
+		screenConstruction = [];
 		let i = 0;
 		do { // Set up render data
-			renderConstruction.push(new SLL());
+			screenConstruction.push(new SLL());
 			i++;
 		} while (i < screenSize);
 		// console.log(`render construction took ${Date.now() - start}ms`);
 	}
 	let screenWidth, screenSize;
-	let renderedChar, renderedFg, renderedBg, renderConstruction;
+	let renderedChar, renderedFg, renderedBg, screenConstruction;
 
 	// Colors
 	// 0000 0000 0000 0000 0000 0000 0000 0000
@@ -49,7 +52,7 @@ const BufferManager = function() {
 
 	this.fg = 0;
 	this.bg = 0;
-	let lastRenderData = { x: null, y: null, fg: 0, bg: 0 };
+	let consoleRenderData = { x: null, y: null, fg: 0, bg: 0 };
 
 	this.setFg = colorCode => this.fg = colorCode;
 	this.setBg = colorCode => this.bg = colorCode;
@@ -113,24 +116,17 @@ const BufferManager = function() {
 	this.createRenderOutput = () => currentRender = [];
 
 	const addToRenderOutput = function(char, fg, bg, x, y) {
-		//setTimeout(() => console.log(lastRenderData), 1000);
-		const fgChanged = fg != lastRenderData.fg;
-		const bgChanged = bg != lastRenderData.bg;
+		const fgChanged = fg != consoleRenderData.fg;
+		const bgChanged = bg != consoleRenderData.bg;
 		if (fgChanged || bgChanged) {
-			/*
-			if (!fg || !bg) currentRender.push(resetColorString);
-			if (fgChanged) currentRender.push(fgHexToString(getHex(fg)));
-			if (bgChanged) currentRender.push(bgHexToString(getHex(bg)));
-			*/
-			// 256 color override for mac terminal development... IT WORKS!
-			if (!fg || !bg) currentRender.push(resetColorString);
-			if (fgChanged) currentRender.push(fg256ToString(hexTo256Color(getHex(fg))));
-			if (bgChanged) currentRender.push(bg256ToString(hexTo256Color(getHex(bg))));
+			if (!getOpacity(bg)) currentRender.push(resetColorString);
+			if (fgChanged && getOpacity(fg)) currentRender.push(fgHexToString(getHex(fg)));
+			if (bgChanged && getOpacity(bg)) currentRender.push(bgHexToString(getHex(bg)));
 		}
-		const moveCursorNecessary = !(y == lastRenderData.y && x == lastRenderData.x + 1);
+		const moveCursorNecessary = !(y == consoleRenderData.y && x == consoleRenderData.x + 1);
 		if (moveCursorNecessary) currentRender.push(moveCursorString(x, y));
 		currentRender.push(String.fromCharCode(char));
-		lastRenderData = { x: x, y: y, fg: fg, bg: bg };
+		consoleRenderData = { x: x, y: y, fg: fg, bg: bg };
 	}
 
 	const hexDebugString = color => {
@@ -140,15 +136,124 @@ const BufferManager = function() {
 		const hexString = hex.toString(16);
 		return ANSI + '#' + '0'.repeat(6 - hexString.length) + hexString + resetColorString;
 	};
-	// const hexDebugString = color => {
-	// 	if (!color) return '[none]';
-	// 	const hex = getHex(color);
-	// 	// const ANSI = fg256ToString(hexTo256Color(hex));
-	// 	const ANSI = fgHexToString(hex);
-	// 	return ANSI + '#' + getHex(color).toString(16) + resetColorString;
-	// };
 
 	this.requestDraw = function(char, fg, bg, x, y, id, zIndex) {
+		const screenIndex = y * screenWidth + x;
+		const datapoint = screenConstruction[screenIndex];
+		datapoint.addSorted(id, zIndex, {
+			char: char, fg: fg, bg: bg, bufferId: id, zIndex: zIndex
+		});
+
+		let outputChar = 32;
+		let outputFg = 0;
+		let outputBg = 0;
+		let fgStackIndex = null;
+		let bgStack = [];
+		let fgOpacityAConcern = false;
+		let bgOpacityAConcern = false;
+
+		let index = 0;
+		datapoint.forEach(item => {
+			const char = item.char;
+			const fg = item.fg;
+			const bg = item.bg;
+			if (getOpacity(bg)) {
+				// if (!outputChar) outputChar = 32;
+				if (getOpacity(bg) == 100) {
+					bgStack = [bg];
+					fgStackIndex = null;
+					fgOpacityAConcern = false;
+					outputFg = 0;
+					bgOpacityAConcern = false;
+				} else if (!bgOpacityAConcern) {
+					if (!bgStack.length) bgStack.push(100 << 24);
+					bgOpacityAConcern = true;
+				}
+				if (bgOpacityAConcern) {
+					bgStack.push(bg);
+					index++;
+				}
+			}
+			if (char != 32 && getOpacity(fg)) { // only render the char if the fg shows
+				fgStackIndex = index;
+				fgOpacityAConcern = getOpacity(fg) < 100;
+				outputFg = fg;
+				outputChar = char;
+			}
+		});
+
+		// these layering algos assume the bottom opacity is 100, or else what would the top color fade to?
+		const layerColorsHex = function(topHex, opacity, bottomHex) {
+			const topRGB = hexToRGB(topHex);
+			const bottomRGB = hexToRGB(bottomHex);
+			const calcOpacityDelta = (top, bottom) => Math.floor((bottom - top) * (100 - opacity) / 100);
+			return rgbToHex(
+				topRGB.r + calcOpacityDelta(topRGB.r, bottomRGB.r),
+				topRGB.g + calcOpacityDelta(topRGB.g, bottomRGB.g),
+				topRGB.b + calcOpacityDelta(topRGB.b, bottomRGB.b)
+			);
+		}
+		// meant to be used repeatedly over the hex algo above, since this one doesn't round
+		const layerColorsRGBA = function(topRGBA, bottomRGBA) {
+			const opacity = topRGBA.a;
+			const calcOpacityDelta = (top, bottom) => (bottom - top) * (100 - opacity) / 100;
+			return {
+				r: topRGBA.r + calcOpacityDelta(topRGBA.r, bottomRGBA.r),
+				g: topRGBA.g + calcOpacityDelta(topRGBA.g, bottomRGBA.g),
+				b: topRGBA.b + calcOpacityDelta(topRGBA.b, bottomRGBA.b),
+				a: 100
+			}
+		}
+
+		if (bgOpacityAConcern) {
+			outputBg = bgStack[0];
+			let outputFgRGBA = getRGBA(outputFg);
+			let outputBgRGBA = getRGBA(outputBg);
+			let coverFgWithBg = false;
+			const insertFgIntoOpacityCalc = function() {
+				outputFgRGBA = layerColorsRGBA(getRGBA(outputFg), outputBgRGBA);
+				coverFgWithBg = true;
+			}
+			if (fgStackIndex == 0) insertFgIntoOpacityCalc();
+			let i = 1;
+			do { // loop through bgStack
+				const currentBgRGBA = getRGBA(bgStack[i]);
+				outputBgRGBA = layerColorsRGBA(currentBgRGBA, outputBgRGBA);
+				if (coverFgWithBg) outputFgRGBA = layerColorsRGBA(currentBgRGBA, outputFgRGBA);
+				if (i == fgStackIndex) insertFgIntoOpacityCalc();
+				i++;
+			} while (i < bgStack.length);
+			outputFg = setRGBA(outputFgRGBA);
+			outputBg = setRGBA(outputBgRGBA);
+		} else {
+			if (bgStack[0]) outputBg = bgStack[0];
+			if (fgOpacityAConcern) outputFg = this.hex(layerColorsHex(getHex(outputFg), getOpacity(outputFg), getHex(outputBg)));
+		}
+
+		let screenChanged = screenCodes[screenIndex] != outputChar || screenFGs[screenIndex] != outputFg || screenBGs[screenIndex] != outputBg
+		if (screenChanged) {
+			addToRenderOutput(outputChar, outputFg, outputBg, x, y);
+		}
+		screenCodes[screenIndex] = outputChar;
+		screenFGs[screenIndex] = outputFg;
+		screenBGs[screenIndex] = outputBg;
+	}
+
+	this.executeRenderOutput = function() {
+		// console.log(currentRender);
+		process.stdout.write(currentRender.join(''));
+	}
+
+	this.setSize();
+
+
+
+
+
+
+
+
+	this.requestDrawDebug = function(char, fg, bg, x, y, id, zIndex) {
 		console.log('requesting draw for buffer #' + id);
 		const charDebugString = `char: ${char} (${String.fromCharCode(char)})`;
 		const fgDebugString = ` fg: #${getHex(fg).toString(16)}(${getOpacity(fg)})`;
@@ -161,7 +266,7 @@ const BufferManager = function() {
 		console.log('x', x, 'y', y);
 
 		const screenIndex = y * screenWidth + x;
-		const datapoint = renderConstruction[screenIndex];
+		const datapoint = screenConstruction[screenIndex];
 		datapoint.addSorted(id, zIndex, {
 			char: char, fg: fg, bg: bg, bufferId: id, zIndex: zIndex
 		});
@@ -169,7 +274,7 @@ const BufferManager = function() {
 		let outputChar = 32;
 		let outputFg = 0;
 		let outputBg = 0;
-		let fgStackIndex = 0;
+		let fgStackIndex = null;
 		let bgStack = [];
 		let fgOpacityAConcern = false;
 		let bgOpacityAConcern = false;
@@ -186,27 +291,32 @@ const BufferManager = function() {
 			}
 			console.log();
 			
+			const char = item.char;
 			const fg = item.fg;
 			const bg = item.bg;
-			if (bg && getOpacity(bg)) {
+			if (getOpacity(bg)) {
+				// if (!outputChar) outputChar = 32;
 				if (getOpacity(bg) == 100) {
 					bgStack = [bg];
+					fgStackIndex = null;
+					fgOpacityAConcern = false;
+					outputFg = 0;
 					bgOpacityAConcern = false;
 				} else if (!bgOpacityAConcern) {
-					// if (!bgStack.length) bgStack.push(100 << 24);
+					if (!bgStack.length) bgStack.push(100 << 24);
 					bgOpacityAConcern = true;
 				}
-				if (bgOpacityAConcern) bgStack.push(bg);
+				if (bgOpacityAConcern) {
+					bgStack.push(bg);
+					index++;
+				}
 			}
-			if (item.char == 32) {
-
-			} else if (fg && getOpacity(fg)) { // only render the char if there's a fg
+			if (char != 32 && getOpacity(fg)) { // only render the char if the fg shows
 				fgStackIndex = index;
 				fgOpacityAConcern = getOpacity(fg) < 100;
 				outputFg = fg;
-				outputChar = item.char;
+				outputChar = char;
 			}
-			index++;
 		});
 		console.log('fgStackIndex', fgStackIndex);
 		const bgStackDebugArray = [];
@@ -236,68 +346,49 @@ const BufferManager = function() {
 			}
 		}
 
-		console.log();
 		if (bgOpacityAConcern) {
-			let i;
-			let outputFgRGBA;
-			let outputBgRGBA;
-			let calcFgOpacity = false;
+			outputBg = bgStack[0];
+			let outputFgRGBA = getRGBA(outputFg);
+			let outputBgRGBA = getRGBA(outputBg);
+			let coverFgWithBg = false;
+			console.log('starting background:', hexDebugString(outputBg), outputBgRGBA);
 			const insertFgIntoOpacityCalc = function() {
 				outputFgRGBA = layerColorsRGBA(getRGBA(outputFg), outputBgRGBA);
-				outputFg = setRGBA(outputFgRGBA); // only needs to be done at the end, here for debugging purposes
-				console.log('outputFg', hexDebugString(outputFg), outputFgRGBA);
-				calcFgOpacity = true;
+				outputFg = setRGBA(outputFgRGBA);
+				console.log(' └─> fg layering:   ', hexDebugString(outputFg), outputFgRGBA);
+				coverFgWithBg = true;
 			}
-			if (getOpacity(bgStack[0]) == 100) {
-				i = 1;
-				outputBg = bgStack[0];
-				outputBgRGBA = getRGBA(bgStack[0]);
-				if (fgOpacityAConcern) insertFgIntoOpacityCalc();
-			} else {
-				i = 0;
-				outputBg = 100 << 24;
-				outputBgRGBA = { r: 0, g: 0, b: 0, a: 100 };
-			}
-			console.log('outputBg', 'index: -', hexDebugString(outputBg), outputBgRGBA);
+			if (fgStackIndex == 0) insertFgIntoOpacityCalc();
+			let i = 1;
 			do { // loop through bgStack
-				outputBgRGBA = layerColorsRGBA(getRGBA(bgStack[i]), outputBgRGBA);
-				outputBg = setRGBA(outputBgRGBA); // only needs to be done at the end, here for debugging purposes
-				console.log('outputBg', 'index: ' + i, hexDebugString(outputBg), outputBgRGBA);
-				if (calcFgOpacity) {
-					// Layers clear backgrounds over the foreground color
-					outputFgRGBA = layerColorsRGBA(getRGBA(bgStack[i]), outputFgRGBA);
-					outputFg = setRGBA(outputFgRGBA); // only needs to be done at the end, here for debugging purposes
-					console.log('outputFg', hexDebugString(outputFg), outputFgRGBA);
+				const currentBgRGBA = getRGBA(bgStack[i]);
+				outputBgRGBA = layerColorsRGBA(currentBgRGBA, outputBgRGBA);
+				outputBg = setRGBA(outputBgRGBA);
+				console.log('└──> combination:   ', hexDebugString(bgStack[i]), currentBgRGBA);
+				console.log('output background:  ', hexDebugString(outputBg), outputBgRGBA);
+				if (coverFgWithBg) {
+					outputFgRGBA = layerColorsRGBA(currentBgRGBA, outputFgRGBA);
+					outputFg = setRGBA(outputFgRGBA);
+					console.log(' └─> fg covering:   ', hexDebugString(outputFg), outputFgRGBA);
 				}
-				if (fgOpacityAConcern && i == fgStackIndex) insertFgIntoOpacityCalc();
+				if (i == fgStackIndex) insertFgIntoOpacityCalc();
 				i++;
 			} while (i < bgStack.length);
 		} else {
-			outputBg = bgStack[0];
-			if (fgOpacityAConcern) {
-				outputFg = layerColorsHex(getHex(outputFg), getOpacity(outputFg), getHex(outputBg));
-			}
+			if (bgStack[0]) outputBg = bgStack[0];
+			if (fgOpacityAConcern) outputFg = this.hex(layerColorsHex(getHex(outputFg), getOpacity(outputFg), getHex(outputBg)));
 		}
 
 		console.log();
 		console.log('outputChar', outputChar);
 		console.log('outputFg', hexDebugString(outputFg), getOpacity(outputFg), 'calculated:', fgOpacityAConcern);
 		console.log('outputBg', hexDebugString(outputBg), getOpacity(outputBg), 'calculated:', bgOpacityAConcern);
-		console.log('\n' + fgHexToString(getHex(outputFg)) + bgHexToString(getHex(outputBg)) + '    ' + String.fromCharCode(outputChar).repeat(4) + '    ' + resetColorString);
-		// addToRenderOutput(char, fg, bg, x, y);
+		const fgANSI = getOpacity(outputFg) ? fgHexToString(getHex(outputFg)) : resetColorString;
+		const bgANSI = getOpacity(outputBg) ? bgHexToString(getHex(outputBg)) : resetColorString + fgANSI;
+		console.log('\n' + fgANSI + bgANSI + '    ' + String.fromCharCode(outputChar).repeat(4) + '    ' + resetColorString);
 		console.log();
-	};
-	this.executeRenderOutput = function() {
-		//console.clear();
-		//process.stdout.write(currentRender.join(''));
-		//process.stdout.cursorTo(1, 3);
-		//const datapoint = renderConstruction[2 * screenWidth + 10];
-		//renderConstruction[2 * screenWidth + 10].log();
-		//console.log();
-		//console.log('render output: ', currentRender, '\n\n');
-	}
 
-	this.setSize();
+	}
 }
 
 module.exports = BufferManager;
