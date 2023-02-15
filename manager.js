@@ -161,9 +161,10 @@ const BufferManager = function() {
 				// if (!outputChar) outputChar = 32;
 				if (getOpacity(bg) == 100) {
 					bgStack = [bg];
+					outputFg = 0;
+					index = 0;
 					fgStackIndex = null;
 					fgOpacityAConcern = false;
-					outputFg = 0;
 					bgOpacityAConcern = false;
 				} else if (!bgOpacityAConcern) {
 					if (!bgStack.length) bgStack.push(100 << 24);
@@ -298,6 +299,7 @@ const BufferManager = function() {
 				// if (!outputChar) outputChar = 32;
 				if (getOpacity(bg) == 100) {
 					bgStack = [bg];
+					index = 0;
 					fgStackIndex = null;
 					fgOpacityAConcern = false;
 					outputFg = 0;
