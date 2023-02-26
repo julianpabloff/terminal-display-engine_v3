@@ -1,6 +1,8 @@
 const stdout = process.stdout;
 const rows = stdout.rows;
 const columns = stdout.columns;
+const centerWidth = width => Math.floor(columns / 2 - width / 2);
+const centerHeight = height => Math.floor(rows / 2 - height / 2);
 
 stdout.write('\x1b[2J'); // clear screen
 stdout.write('\x1b[?25l'); // hide cursor
@@ -36,39 +38,36 @@ async function test1() {
 	buffer.write('hello', hex(0, 40), hex(0xaa33aa));
 	buffer.render(true);
 
-	await wait(1000);
+	await wait(500);
 	const second = manager.createBuffer(x, y, 5, 1, 1);
 	second.write('blehh', hex(0xb970aa, 0), hex(0x444444, 100));
 	second.render(true);
 
-	await wait(1000);
+	await wait(500);
 	const third = manager.createBuffer(x, y, 5, 1, 3);
 	third.write('     ', hex(0xeeeeee, 40), hex(0x11aa78, 50));
 	third.render(true);
 
-	await wait(1000);
-	buffer.write('aaaaa', hex(0xfe0000, 70), hex(0x3456ee, 0));
+	await wait(500);
 	buffer.render(true);
+	// await wait(1000);
+	// buffer.write('aaaaa', hex(0xfe0000, 70), hex(0x3456ee, 10));
+	// buffer.render(true);
 
 	await wait(1000);
 	exit();
 }
 
+// Real world test
 async function test2() {
-	const centerWidth = width => Math.floor(columns / 2 - width / 2);
-	const centerHeight = height => Math.floor(rows / 2 - height / 2);
 
 	const x = centerWidth(40);
 	const y = centerHeight(8);
-	// const background = manager.createBuffer(5, y - 10, columns - 20, 40 + 20);
 	const background = manager.createBuffer(5, y - 10, columns - 10, 28);
 	background.fill(hex(0x333333)).render();
+
+	await wait(500);
 	const buffer = manager.createBuffer(x, y, 40, 8, 1);
-
-	// buffer.write('hello', hex(0xff0000), hex(0x444444)).render();
-	// await wait(1000);
-	// buffer.write('world', hex(0x00aa00)).render();
-
 	buffer.fill(hex(0x4587bb));
 	buffer.write('notice the color of this text changes', hex(0xcccccc), hex(0x4587bb));
 	buffer.draw('when covered by a background', 0, 1, hex(0x666666), hex(0x4587bb));
@@ -77,16 +76,18 @@ async function test2() {
 	await wait(1000);
 	const second = manager.createBuffer(x - 10, y - 4, 20, 8, 2);
 	await intervalIterate(13, 71, i => {
-		second.fill(hex(0x45bb87, i)); 
+		second.fill(hex(0x45bb87, i));
 		second.render();
 	});
 
-	// await wait(1000);
+	await wait(1000);
+	buffer.render();
 
 	await wait(1000);
 	exit();
 }
 
+// Debug replication of test2
 async function test3() {
 	const x = 10;
 	const y = 2;
@@ -115,6 +116,25 @@ async function test3() {
 	exit();
 }
 
+async function test4() {
+	const color1 = hex(0x00ffff, 100);
+	const color2 = hex(0xff0000, 100);
+	const grad = manager.linearGradient(color1, color2, 20, false);
+	console.log(color1, 'to', color2);
+	console.log(grad);
+
+	const buffer = manager.createBuffer(centerWidth(20), centerHeight(10), 20, 10);
+	for (const color of grad) {
+		buffer.write(' ', hex(0xffffff), color);
+	}
+	buffer.render();
+
+	await wait(1000);
+	exit();
+}
+
 // test1();
-test2();
+// test2();
 // test3();
+test4();
+

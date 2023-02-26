@@ -140,9 +140,9 @@ const BufferManager = function() {
 	this.requestDraw = function(char, fg, bg, x, y, id, zIndex) {
 		const screenIndex = y * screenWidth + x;
 		const datapoint = screenConstruction[screenIndex];
-		datapoint.addSorted(id, zIndex, {
-			char: char, fg: fg, bg: bg, bufferId: id, zIndex: zIndex
-		});
+		const drawObject = { char: char, fg: fg, bg: bg, bufferId: id, zIndex: zIndex };
+		if (char) datapoint.addSorted(id, zIndex, drawObject);
+		else datapoint.deleteById(id);
 
 		let outputChar = 32;
 		let outputFg = 0;
@@ -245,6 +245,35 @@ const BufferManager = function() {
 		process.stdout.write(currentRender.join(''));
 	}
 
+	// Generates an array of [count] length of color codes linearly interpolated from [color1] to [color2]
+	// [inclusive = false] is for chaining linear gradients, preventing the stop of a grad and start of the next from being duplicated
+	this.linearGradient = function(color1, color2, count, inclusive = true) {
+		const hex1 = color1 & 0xffffff;
+		let r = hex1 >> 16;
+		let g = (hex1 >> 8) & 0xff;
+		let b = hex1 & 0xff;
+		let a = color1 >> 24;
+		const output = new Uint32Array(count);
+
+		if (!inclusive) count++;
+		const hex2 = color2 & 0xffffff;
+		const intervalR = ((hex2 >> 16) - r) / count;
+		const intervalG = (((hex2 >> 8) & 0xff) - g) / count;
+		const intervalB = ((hex2 & 0xff) - b) / count;
+		const intervalA = ((color2 >> 24) - a) / count;
+
+		output[0] = color1;
+		let i = 1;
+		do {
+			r += intervalR; g += intervalG; b += intervalB; a += intervalA;
+			const outputHex = (Math.round(r) << 16) + (Math.round(g) << 8) + Math.round(b);
+			output[i] = outputHex + (a << 24);
+			i++;
+		} while (i < count - 1);
+		if (inclusive) output[count - 1] = color2;
+		return output;
+	}
+
 	this.setSize();
 
 
@@ -268,9 +297,9 @@ const BufferManager = function() {
 
 		const screenIndex = y * screenWidth + x;
 		const datapoint = screenConstruction[screenIndex];
-		datapoint.addSorted(id, zIndex, {
-			char: char, fg: fg, bg: bg, bufferId: id, zIndex: zIndex
-		});
+		const drawObject = { char: char, fg: fg, bg: bg, bufferId: id, zIndex: zIndex };
+		if (char) datapoint.addSorted(id, zIndex, drawObject);
+		else datapoint.deleteById(id);
 
 		let outputChar = 32;
 		let outputFg = 0;
@@ -390,6 +419,49 @@ const BufferManager = function() {
 		console.log('\n' + fgANSI + bgANSI + '    ' + String.fromCharCode(outputChar).repeat(4) + '    ' + resetColorString);
 		console.log();
 
+	}
+
+	this.linearGradientDebug = function(color1, color2, count) {
+		const hex1 = color1 & 0xffffff;
+		const opacity1 = color1 >> 24;
+		const r1 = hex1 >> 16;
+		const g1 = (hex1 >> 8) & 0xff;
+		const b1 = hex1 & 0xff;
+
+		console.log('COLOR 1');
+		console.log('hex', hexDebugString(hex1));
+		console.log('r', r1, 'g', g1, 'b', b1, 'a', opacity1);
+
+		const hex2 = color2 & 0xffffff;
+		const opacity2 = color2 >> 24;
+		const r2 = hex2 >> 16;
+		const g2 = (hex2 >> 8) & 0xff;
+		const b2 = hex2 & 0xff;
+
+		console.log('\nCOLOR 2');
+		console.log('hex', hexDebugString(hex2));
+		console.log('r', r2, 'g', g2, 'b', b2, 'a', opacity2);
+
+		const intervalR = (r2 - r1) / count;
+		const intervalG = (g2 - g1) / count;
+		const intervalB = (b2 - b1) / count;
+		const intervalA = (opacity2 - opacity1) / count;
+		let r = r1; let g = g1; let b = b1; let a = opacity1;
+
+		console.log();
+		const output = [color1];
+		console.log('r', r, 'g', g, 'b', b, 'a', a);
+		for (let i = 1; i < count - 1; i++) {
+			r += intervalR; g += intervalG; b += intervalB; a += intervalA;
+			const hex = (Math.round(r) << 16) + (Math.round(g) << 8) + Math.round(b);
+			const color = hex + (a << 24);
+			output.push(color);
+			console.log('r', r, 'g', g, 'b', b, 'a', a);
+		}
+		output.push(color2);
+		console.log('r', r2, 'g', g2, 'b', b2, 'a', opacity2);
+
+		return output;
 	}
 }
 

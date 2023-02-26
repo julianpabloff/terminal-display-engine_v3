@@ -84,6 +84,7 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 	}
 
 	this.fill = function(color) {
+		canvasCodes.fill(32); // If there aren't spaces, that counts as an erasal
 		canvasBGs.fill(color);
 		changed = true;
 		return this;

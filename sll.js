@@ -39,6 +39,16 @@ const SLL = function() {
 		runner.next = newNode;
 		this.length++;
 	}
+	this.deleteById = function(id) {
+		let runner = start;
+		while (runner.next) {
+			if (id == runner.next.id) {
+				runner.next = runner.next.next;
+				return;
+			}
+			runner = runner.next;
+		}
+	}
 	this.forEach = function(callback) {
 		let runner = start;
 		let index = 0;
