@@ -50,7 +50,7 @@ const BufferManager = function() {
 	// meant to take in decimal values of RGB during opacity calculations
 	const setRGBA = rgba => (Math.round(rgba.a) << 24) + (Math.round(rgba.r) << 16) + (Math.round(rgba.g) << 8) + Math.round(rgba.b);
 
-	this.fg = 0;
+	this.fg = (100 << 24) + (255 << 16) + (255 << 8) + 255; // White default
 	this.bg = 0;
 	let consoleRenderData = { x: null, y: null, fg: 0, bg: 0 };
 
@@ -185,7 +185,7 @@ const BufferManager = function() {
 			const topRGB = hexToRGB(topHex);
 			const bottomRGB = hexToRGB(bottomHex);
 			const calcOpacityDelta = (top, bottom) => Math.floor((bottom - top) * (100 - opacity) / 100);
-			return rgbToHex(
+			return (100 << 24) + rgbToHex(
 				topRGB.r + calcOpacityDelta(topRGB.r, bottomRGB.r),
 				topRGB.g + calcOpacityDelta(topRGB.g, bottomRGB.g),
 				topRGB.b + calcOpacityDelta(topRGB.b, bottomRGB.b)
@@ -225,7 +225,7 @@ const BufferManager = function() {
 			outputBg = setRGBA(outputBgRGBA);
 		} else {
 			if (bgStack.at(0)) outputBg = bgStack.at(0);
-			if (fgOpacityAConcern) outputFg = this.hex(layerColorsHex(getHex(outputFg), getOpacity(outputFg), getHex(outputBg)));
+			if (fgOpacityAConcern) outputFg = layerColorsHex(getHex(outputFg), getOpacity(outputFg), getHex(outputBg));
 		}
 
 		let screenChanged =
@@ -331,7 +331,7 @@ const BufferManager = function() {
 			const topRGB = hexToRGB(topHex);
 			const bottomRGB = hexToRGB(bottomHex);
 			const calcOpacityDelta = (top, bottom) => Math.floor((bottom - top) * (100 - opacity) / 100);
-			return rgbToHex(
+			return (100 << 24) + rgbToHex(
 				topRGB.r + calcOpacityDelta(topRGB.r, bottomRGB.r),
 				topRGB.g + calcOpacityDelta(topRGB.g, bottomRGB.g),
 				topRGB.b + calcOpacityDelta(topRGB.b, bottomRGB.b)
@@ -379,7 +379,7 @@ const BufferManager = function() {
 			} while (i < bgStack.length);
 		} else {
 			if (bgStack.at(0)) outputBg = bgStack.at(0);
-			if (fgOpacityAConcern) outputFg = this.hex(layerColorsHex(getHex(outputFg), getOpacity(outputFg), getHex(outputBg)));
+			if (fgOpacityAConcern) outputFg = layerColorsHex(getHex(outputFg), getOpacity(outputFg), getHex(outputBg));
 		}
 
 		console.log();

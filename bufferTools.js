@@ -1,4 +1,4 @@
-const BufferTools = function() {
+const BufferTools = function(manager) {
 	this.hex = (hex, opacity = 100) => hex + (opacity << 24);
 	this.rgba = (r, g, b, a = 100) => (a << 24) + (r << 16) + (g << 8) + b;
 
@@ -47,7 +47,6 @@ const BufferTools = function() {
 	// colorArray = [ red, yellow, green, cyan, blue, magenta ]
 	// {inclusive} pastes an extra color at the end, the last color - doesn't affect the color change rate
 	this.linearGradientMulti = function(colorArray, segmentLength, inclusive = true) {
-		console.log(colorArray);
 		const colorCount = colorArray.length;
 		const outputLength = segmentLength * (colorCount - 1) + inclusive;
 		const output = new Uint32Array(outputLength);
@@ -68,6 +67,16 @@ const BufferTools = function() {
 		if (inclusive) output[outputLength - 1] = colorArray.at(-1);
 
 		return output;
+	}
+
+	this.outline = function(buffer, color = manager.fg, doubleLine = false) {
+		let sq = {tl: '┌', h: '─', tr: '┐', v: '│', bl: '└', br: '┘'};
+		if (doubleLine) sq = {tl: '╔', h: '═', tr: '╗', v: '║', bl: '╚', br: '╝'}
+
+		buffer.draw(sq.tl + sq.h.repeat(buffer.width - 2) + sq.tr, 0, 0, color);
+		for (let i = 1; i < buffer.height - 1; i++)
+		buffer.draw(sq.v, 0, i, color).draw(sq.v, buffer.end, i, color);
+		buffer.draw(sq.bl + sq.h.repeat(buffer.width - 2) + sq.br, 0, buffer.bottom, color);
 	}
 }
 

@@ -49,18 +49,30 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 		return this;
 	}
 
-	this.render = function(debug = false) {
+	this.render = function(paint = false, debug = false) { // get rid of debug param eventually
 		if (!changed || this.hidden) return;
 		const start = Date.now();
 		manager.createRenderOutput();
 		let i = 0;
 		do { // Loop through buffer
-			const code = canvasCodes.at(i);
-			const fg = canvasFGs.at(i);
-			const bg = canvasBGs.at(i);
+			let code = canvasCodes.at(i);
+			let fg = canvasFGs.at(i);
+			let bg = canvasBGs.at(i);
 			const currentCode = currentCodes.at(i);
 			const currentFg = currentFGs.at(i);
 			const currentBg = currentBGs.at(i);
+
+			// Paint functionality
+			if (paint) {
+				if (!code && currentCode) {
+					canvasCodes[i] = 0;
+					canvasFGs[i] = 0;
+					canvasBGs[i] = 0;
+					i++;
+					continue;
+				} else if (code && !bg) bg = currentBg;
+			}
+
 			const screenX = this.x + (i % this.width);
 			const screenY = this.y + Math.floor(i / this.width);
 
@@ -77,11 +89,14 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 			canvasBGs[i] = 0;
 			i++;
 		} while (i < this.size && !debug);
-		// console.log(currentCodes);
+
 		manager.executeRenderOutput();
+
 		// process.stdout.cursorTo(0, 0);
 		// console.log('render took ' + (Date.now() - start) + 'ms');
 	}
+
+	this.paint = () => this.render(true);
 
 	this.fill = function(color) {
 		canvasCodes.fill(32); // If there aren't spaces, that counts as an erasal
