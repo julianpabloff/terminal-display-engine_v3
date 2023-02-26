@@ -26,9 +26,14 @@ const exit = () => {
 	process.exit();
 };
 const wait = async miliseconds => new Promise(resolve => setTimeout(resolve, miliseconds));
+
 const BufferManager = require('./manager.js');
+const BufferTools = require('./bufferTools.js');
 const manager = new BufferManager();
-const hex = manager.hex;
+const tools = new BufferTools();
+
+const hex = tools.hex;
+const colors = tools.colors;
 
 async function test1() {
 	const x = 10;
@@ -116,17 +121,23 @@ async function test3() {
 	exit();
 }
 
+// Linear gradients
 async function test4() {
-	const color1 = hex(0x00ffff, 100);
-	const color2 = hex(0xff0000, 100);
-	const grad = manager.linearGradient(color1, color2, 20, false);
-	console.log(color1, 'to', color2);
-	console.log(grad);
+	const rainbow = [
+		colors.red,
+		colors.yellow,
+		colors.green,
+		colors.cyan,
+		colors.blue,
+		colors.magenta,
+		colors.red
+	];
 
-	const buffer = manager.createBuffer(centerWidth(20), centerHeight(10), 20, 10);
-	for (const color of grad) {
-		buffer.write(' ', hex(0xffffff), color);
-	}
+	const rainbowGrad = tools.linearGradientMulti(rainbow, 8, false);
+	console.log(rainbowGrad);
+
+	const buffer = manager.createBuffer(centerWidth(50), centerHeight(10), 50, 10);
+	for (const color of rainbowGrad) buffer.write(' ', 0, color);
 	buffer.render();
 
 	await wait(1000);

@@ -55,12 +55,12 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 		manager.createRenderOutput();
 		let i = 0;
 		do { // Loop through buffer
-			const code = canvasCodes[i];
-			const fg = canvasFGs[i];
-			const bg = canvasBGs[i];
-			const currentCode = currentCodes[i];
-			const currentFg = currentFGs[i];
-			const currentBg = currentBGs[i];
+			const code = canvasCodes.at(i);
+			const fg = canvasFGs.at(i);
+			const bg = canvasBGs.at(i);
+			const currentCode = currentCodes.at(i);
+			const currentFg = currentFGs.at(i);
+			const currentBg = currentBGs.at(i);
 			const screenX = this.x + (i % this.width);
 			const screenY = this.y + Math.floor(i / this.width);
 
