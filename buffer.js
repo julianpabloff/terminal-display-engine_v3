@@ -8,16 +8,46 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 	this.size = width * height;
 	this.zIndex = zIndex;
 	this.hidden = false;
+	this.persistent = false; // makes the screen switching algorithm ignore this buffer, you won't have to draw to it for it to be maintained after the screen switch
+	// this.id = assigned by manager
 
 	// Canvas: the array that you are drawing on that you eventually render to this buffer
 	// Current: what's already been rendered on this buffer
-	const canvasCodes = new Uint16Array(this.size);
-	const canvasFGs = new Uint32Array(this.size);
-	const canvasBGs = new Uint32Array(this.size);
-	const currentCodes = new Uint16Array(this.size);
-	const currentFGs = new Uint32Array(this.size);
-	const currentBGs = new Uint32Array(this.size);
-	let changed = false;
+	let canvasCodes = new Uint16Array(this.size);
+	let canvasFGs = new Uint32Array(this.size);
+	let canvasBGs = new Uint32Array(this.size);
+	let currentCodes = new Uint16Array(this.size);
+	let currentFGs = new Uint32Array(this.size);
+	let currentBGs = new Uint32Array(this.size);
+
+	// Adds the buffer from manager > pendingBufferIds for the createScreenConstruction function
+	let pending = false;
+	const makePending = () => {
+		if (pending) return;
+		pending = true;
+		manager.registerToPending(this.id);
+	}
+
+	// For the manager to lookup a buffer's canvas values at (screenX, screenY)
+	this.screenToIndex = (x, y) => {
+		if (x < this.x || x >= this.x + this.width || y < this.y || y >= this.y + this.height) return null;
+		return ((y - this.y) * this.width) + x - this.x;
+	}
+	this.canvasLookup = index => { // returns PointData
+		return {
+			'code': canvasCodes.at(index),
+			'fg': canvasFGs.at(index),
+			'bg': canvasBGs.at(index)
+		}
+	}
+	this.transferCanvas = function() {
+		currentCodes = new Uint16Array(canvasCodes);
+		currentFGs = new Uint32Array(canvasFGs);
+		currentBGs = new Uint32Array(canvasBGs);
+		canvasCodes = new Uint16Array(this.size);
+		canvasFGs = new Uint32Array(this.size);
+		canvasBGs = new Uint32Array(this.size);
+	}
 
 	// Writing to buffer
 	let cursorIndex = 0;
@@ -25,34 +55,42 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 	this.cursorTo = (x, y) => cursorIndex = coordinateIndex(x, y);
 
 	this.print = function(string, index, fg, bg) {
+		let inheritCurrentBg = false;
+		if (fg == null) fg = manager.fg;
+		if (bg == null) {
+			bg = manager.bg;
+			inheritCurrentBg = !manager.bg;
+		}
+
 		const stringLength = string.length;
 		let i = index;
 		let stringIndex = 0;
 		while (stringIndex < stringLength && i < this.size) {
 			canvasCodes[i] = string.charCodeAt(stringIndex);
 			canvasFGs[i] = fg;
-			canvasBGs[i] = bg;
+			if (!inheritCurrentBg) canvasBGs[i] = bg;
 			stringIndex++;
 			i++;
-		};
+		}
 		cursorIndex += stringLength;
 		if (cursorIndex >= this.size) cursorIndex = 0;
-		changed = true;
+		makePending();
 	}
-	this.write = function(string, fg = manager.fg, bg = manager.bg) {
+	// this.write = function(string, fg = manager.fg, bg = manager.bg) {
+	this.write = function(string, fg = null, bg = null) {
 		this.print(string, cursorIndex, fg, bg);
 		return this;
 	}
-	this.draw = function(string, x, y, fg = manager.fg, bg = manager.bg) {
-		const index = coordinateIndex(x, y);
-		this.print(string, index, fg, bg);
+	// this.draw = function(string, x, y, fg = manager.fg, bg = manager.bg) {
+	this.draw = function(string, x, y, fg = null, bg = null) {
+		cursorIndex = coordinateIndex(x, y);
+		this.print(string, cursorIndex, fg, bg);
 		return this;
 	}
 
-	this.render = function(paint = false, debug = false) { // get rid of debug param eventually
-		if (!changed || this.hidden) return;
+	this.render = function(paint = false, debug = false) {
+		// if (!pending || this.hidden) return;
 		const start = Date.now();
-		manager.createRenderOutput();
 		let i = 0;
 		do { // Loop through buffer
 			let code = canvasCodes.at(i);
@@ -76,10 +114,8 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 			const screenX = this.x + (i % this.width);
 			const screenY = this.y + Math.floor(i / this.width);
 
-			if (code != currentCode || fg != currentFg || bg != currentBg) {
-				if (debug) manager.requestDrawDebug(code, fg, bg, screenX, screenY, this.id, this.zIndex);
-				else manager.requestDraw(code, fg, bg, screenX, screenY, this.id, this.zIndex);
-			}
+			if (code != currentCode || fg != currentFg || bg != currentBg)
+				manager.requestDraw(code, fg, bg, screenX, screenY, this.id, this.zIndex);
 
 			currentCodes[i] = code;
 			currentFGs[i] = fg;
@@ -90,10 +126,42 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 			i++;
 		} while (i < this.size && !debug);
 
-		manager.executeRenderOutput();
+		manager.executeRenderOutput(this.id);
+		pending = false;
 
 		// process.stdout.cursorTo(0, 0);
 		// console.log('render took ' + (Date.now() - start) + 'ms');
+	}
+
+	this.ghostRender = function(screenWidth) { // only changes the screen construction
+		let i = 0;
+		const affectedIndeces = [];
+		do { // Loop through buffer
+			const code = canvasCodes.at(i);
+			const fg = canvasFGs.at(i);
+			const bg = canvasBGs.at(i);
+			const currentCode = currentCodes.at(i);
+			const currentFg = currentFGs.at(i);
+			const currentBg = currentBGs.at(i);
+			const screenX = this.x + (i % this.width);
+			const screenY = this.y + Math.floor(i / this.width);
+
+			if (code != currentCode || fg != currentFg || bg != currentBg) {
+				manager.applyToConstruction(code, fg, bg, screenX, screenY, this.id, this.zIndex);
+				const screenIndex = screenY * screenWidth + screenX;
+				affectedIndeces.push(screenIndex);
+			}
+
+			currentCodes[i] = code;
+			currentFGs[i] = fg;
+			currentBGs[i] = bg;
+			canvasCodes[i] = 0;
+			canvasFGs[i] = 0;
+			canvasBGs[i] = 0;
+			i++;
+		} while (i < this.size);
+		pending = false;
+		return affectedIndeces; // need to go through these and determineConstructionOutput()
 	}
 
 	this.paint = () => this.render(true);
@@ -101,7 +169,8 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 	this.fill = function(color) {
 		canvasCodes.fill(32); // If there aren't spaces, that counts as an erasal
 		canvasBGs.fill(color);
-		changed = true;
+		// manager.setBg(color);
+		makePending();
 		return this;
 	}
 }

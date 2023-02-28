@@ -44,6 +44,7 @@ const SLL = function() {
 		while (runner.next) {
 			if (id == runner.next.id) {
 				runner.next = runner.next.next;
+				this.length--;
 				return;
 			}
 			runner = runner.next;

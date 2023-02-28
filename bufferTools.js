@@ -34,7 +34,7 @@ const BufferTools = function(manager) {
 
 		output[0] = color1;
 		let i = 1;
-		do {
+		do { // transform r, g, b, a
 			r += intervalR; g += intervalG; b += intervalB; a += intervalA;
 			const outputHex = (Math.round(r) << 16) + (Math.round(g) << 8) + Math.round(b);
 			output[i] = outputHex + (a << 24);
@@ -52,7 +52,7 @@ const BufferTools = function(manager) {
 		const output = new Uint32Array(outputLength);
 
 		let i = 0; let j = 0;
-		do {
+		do { // chain gradients
 			const color1 = colorArray.at(i);
 			const color2 = colorArray.at(i + 1);
 
@@ -62,7 +62,7 @@ const BufferTools = function(manager) {
 				j++;
 			}
 			i++;
-		} while(i < colorCount - 1);
+		} while (i < colorCount - 1);
 
 		if (inclusive) output[outputLength - 1] = colorArray.at(-1);
 
@@ -77,6 +77,7 @@ const BufferTools = function(manager) {
 		for (let i = 1; i < buffer.height - 1; i++)
 		buffer.draw(sq.v, 0, i, color).draw(sq.v, buffer.end, i, color);
 		buffer.draw(sq.bl + sq.h.repeat(buffer.width - 2) + sq.br, 0, buffer.bottom, color);
+		return buffer;
 	}
 }
 
