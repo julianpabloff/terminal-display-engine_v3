@@ -40,21 +40,24 @@ async function test1() {
 	const y = 2;
 	const buffer = manager.createBuffer(x, y, 5, 1, 2);
 	// buffer.write('hello', hex(0xfe0000, 0), hex(0x3456ee, 20));
-	buffer.write('hello', hex(0, 40), hex(0xaa33aa));
-	buffer.render(false, true);
+	// buffer.write('hello', hex(0, 40), hex(0xaa33aa));
+	buffer.fill(colors.yellow);
+	buffer.render();
 
 	await wait(1000);
 	const second = manager.createBuffer(x, y, 5, 1, 1);
-	second.write('blehh', hex(0xb970aa, 0), hex(0x444444, 100));
-	second.render(false, true);
+	second.write('hello', colors.white);
+	second.render();
+	// second.write('blehh', hex(0xb970aa, 0), hex(0x444444, 100));
+	// second.render(false, true);
 
-	await wait(1000);
-	const third = manager.createBuffer(x, y, 5, 1, 3);
-	third.write('     ', hex(0xeeeeee, 40), hex(0x11aa78, 50));
-	third.render(false, true);
+	// await wait(1000);
+	// const third = manager.createBuffer(x, y, 5, 1, 3);
+	// third.write('     ', hex(0xeeeeee, 40), hex(0x11aa78, 50));
+	// third.render(false, true);
 
-	await wait(1000);
-	buffer.render(false, true);
+	// await wait(1000);
+	// buffer.render(false, true);
 	// await wait(1000);
 	// buffer.write('aaaaa', hex(0xfe0000, 70), hex(0x3456ee, 10));
 	// buffer.render(false, true);
@@ -249,7 +252,7 @@ async function test8() {
 	const green = hex(0x349934);
 	const blue = hex(0x343499);
 	const buffer = manager.createBuffer(x, y, w, h);
-	const second = manager.createBuffer(x, y + buffer.height - 2, w, h);
+	const second = manager.createBuffer(x, y + buffer.height - 1, w, h);
 	const background = manager.createBuffer(x - 2, y - 1, w + 4, h * 2 - 1, 2);
 
 	// buffer.persistent = true;
@@ -257,9 +260,8 @@ async function test8() {
 	background.persistent = true;
 
 	await wait(1000);
-	// tools.outline(background, colors.red);
-	// background.fill(hex(0x999934));
-	background.fill(colors.yellow);
+	background.fill(hex(0xffff00, 50));
+	// background.fill(colors.yellow);
 	background.render();
 
 	await wait(1000);
@@ -271,10 +273,61 @@ async function test8() {
 	second.fill(blue);
 	second.write('bitch');
 	manager.massRender();
-	// second.render();
 
-	// await wait(1000);
-	// manager.createScreenConstruction();
+	await wait(1000);
+	await intervalIterate(10, 50, i => {
+		background.fill(hex(0xffff00, 51 + i));
+		background.render();
+	});
+
+	await wait(1000);
+	exit();
+}
+
+// Resizing
+async function test9() {
+	const width = 20;
+	const height = 4;
+	const buffer = manager.createBuffer(centerWidth(width), centerHeight(height), width, height);
+	buffer.fill(colors.red).render();
+	// manager.massRender();
+
+	let keepRunning = true;
+
+	let resizeTimeout;
+	const resizeWait = 1000;
+	process.stdout.on('resize', () => {
+		manager.clearScreen();
+		clearTimeout(resizeTimeout);
+		resizeTimeout = setTimeout(() => {
+			// Resize code goes here
+			buffer.fill(colors.red);
+			buffer.render();
+			// after you draw everything you want, call manager.handleResize();
+			// manager.handleResize();
+			// quit after 2 seconds
+			setTimeout(() => keepRunning = false, 2000);
+		}, resizeWait);
+	});
+
+	while (keepRunning) {
+		await wait(0);
+	}
+	exit();
+}
+
+// Simpler way to test resize
+async function test10() {
+	const width = 20;
+	const height = 4;
+	const buffer = manager.createBuffer(centerWidth(width), centerHeight(height), width, height);
+	buffer.fill(colors.red).render();
+
+	await wait(1000);
+	manager.clearScreen();
+
+	await wait(1000);
+	buffer.fill(colors.red);
 
 	await wait(1000);
 	exit();
@@ -287,4 +340,6 @@ async function test8() {
 // test5();
 // test6();
 // test7();
-test8();
+// test8();
+test9();
+// test10();

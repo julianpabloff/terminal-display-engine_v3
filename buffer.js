@@ -29,6 +29,7 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 	}
 
 	// For the manager to lookup a buffer's canvas values at (screenX, screenY)
+	// this should all go away thanks to ghostRender()
 	this.screenToIndex = (x, y) => {
 		if (x < this.x || x >= this.x + this.width || y < this.y || y >= this.y + this.height) return null;
 		return ((y - this.y) * this.width) + x - this.x;
@@ -133,16 +134,23 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 		// console.log('render took ' + (Date.now() - start) + 'ms');
 	}
 
-	this.ghostRender = function(screenWidth) { // only changes the screen construction
+	this.ghostRender = function(screenWidth, clearCurrent = false) { // only changes the screen construction
 		let i = 0;
 		const affectedIndeces = [];
 		do { // Loop through buffer
 			const code = canvasCodes.at(i);
 			const fg = canvasFGs.at(i);
 			const bg = canvasBGs.at(i);
-			const currentCode = currentCodes.at(i);
-			const currentFg = currentFGs.at(i);
-			const currentBg = currentBGs.at(i);
+
+			let currentCode = 0;
+			let currentFg = 0;
+			let currentBg = 0;
+			if (!clearCurrent) {
+				currentCode = currentCodes.at(i);
+				currentFg = currentFGs.at(i);
+				currentBg = currentBGs.at(i);
+			}
+
 			const screenX = this.x + (i % this.width);
 			const screenY = this.y + Math.floor(i / this.width);
 
@@ -173,6 +181,15 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 		makePending();
 		return this;
 	}
+
+	// TODO: buffer.move()
+	// you can use the massRender() process to render the move in one draw:
+	//  - save the buffer canvas in temp, then empty the canvas
+	//  - call ghostRender() on the buffer with the now empty canvas, effectively removing it from the screenConstruction
+	//  - move the buffer (merely change this.x and this.y to the parameters)
+	//  - repopulate the canvas and call ghostRender() again, which inserts the canvas into the screenConstruction
+	//  - process the affectedLocations and executeRenderOutput() (break the affectedLocations.forEach() out into its own function)
+	//  - tldr: it's just a screen switch but with one buffer
 }
 
 module.exports = DisplayBuffer;

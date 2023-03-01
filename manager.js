@@ -11,7 +11,7 @@ const BufferManager = function() {
 		return buffer;
 	}
 
-	this.setSize = function() {
+	const setSize = function() {
 		screenWidth = process.stdout.columns;
 		screenSize = screenWidth * process.stdout.rows;
 		const start = Date.now();
@@ -30,7 +30,7 @@ const BufferManager = function() {
 	}
 	let screenWidth, screenSize;
 	let screenCodes, screenFGs, screenBGs, screenConstruction;
-	this.setSize();
+	setSize();
 	const getScreenIndex = (x, y) => y * screenWidth + x;
 
 	// Colors
@@ -169,17 +169,16 @@ const BufferManager = function() {
 		let bgOpacityAConcern = false;
 
 		let index = 0;
-		construction.forEach(item => { // item:DrawObject
-			const data = item.pointData;
-			const code = data.code;
-			const fg = data.fg;
-			const bg = data.bg;
+		construction.forEach(item => { // item:PointData
+			const code = item.code;
+			const fg = item.fg;
+			const bg = item.bg;
 
 			if (getOpacity(bg)) {
-				// if (!outputCode) outputCode = 32;
 				if (getOpacity(bg) == 100) {
-					bgStack = [bg];
+					outputCode = 32;
 					outputFg = 0;
+					bgStack = [bg];
 					index = 0;
 					fgStackIndex = null;
 					fgOpacityAConcern = false;
@@ -280,11 +279,8 @@ const BufferManager = function() {
 		const screenIndex = getScreenIndex(x, y);
 		const construction = screenConstruction.at(screenIndex);
 
-		if (code) { // TODO: just add the pointData to the SLL, not the drawObject, that was for debugging
-			const pointData = new PointData(code, fg, bg);
-			const drawObject = new DrawObject(pointData, id, zIndex);
-			construction.addSorted(id, zIndex, drawObject);
-		} else construction.deleteById(id);
+		if (code) construction.addSorted(id, zIndex, new PointData(code, fg, bg));
+		else construction.deleteById(id);
 
 		return construction;
 	}
@@ -297,15 +293,11 @@ const BufferManager = function() {
 
 	// If execute was triggered by a buffer.render(), remove buffer.id from pendingBufferIds
 	this.executeRenderOutput = function(triggerBufferId = null) {
-		// console.log(pendingBufferIds);
-		// console.log('triggerId', triggerBufferId);
-		// console.log(currentRender);
-		process.stdout.write(currentRender.join(''));
+		console.log(currentRender);
+		// process.stdout.write(currentRender.join(''));
 		currentRender = [];
 		if (triggerBufferId != null) pendingBufferIds.delete(triggerBufferId);
 		else pendingBufferIds.clear();
-		// console.log(pendingBufferIds);
-		// console.log();
 	}
 
 	// TODO: make this.handleResize()
@@ -345,11 +337,22 @@ const BufferManager = function() {
 		this.executeRenderOutput();
 	}
 
+	// Steps:
+	//   - setSize()
+	this.handleResize = function() {
+		setSize();
+		const affectedLocations = new Set();
+		for (const buffer of createdBuffers) {
+			const bufferLocations = buffer.ghostRender(screenWidth);
+		}
+	}
+
 	// Renders all buffers' canvases simulateously, used for 'screen switching'
 	// Skips buffers with persistent = true, great for background layers that would stay the same
 	this.massRender = function() {
 		const start = Date.now();
 		const affectedLocations = new Set();
+		console.log(createdBuffers);
 		for (const buffer of createdBuffers) {
 			if (buffer.persistent) continue;
 			const bufferLocations = buffer.ghostRender(screenWidth);
@@ -363,7 +366,7 @@ const BufferManager = function() {
 			addToCurrentRender(determinedOutput, x, y);
 		});
 		const time = Date.now() - start;
-		setTimeout(() => { console.log('render took', time, 'ms')}, 500);
+		// setTimeout(() => { console.log('render took', time, 'ms')}, 500);
 		this.executeRenderOutput();
 	}
 
