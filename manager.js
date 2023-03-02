@@ -3,6 +3,9 @@ const SLL = require('./sll.js');
 const log = string => process.stdout.write('\n' + string);
 
 const BufferManager = function() {
+	const clearScreenString = '\x1b[0m\x1b[?25l\x1b[2J\x1b[3J\x1b[1;1H';
+	this.init = () => process.stdout.write(clearScreenString);
+
 	const createdBuffers = [];
 	this.createBuffer = function(x, y, width, height, zIndex = 0) {
 		const buffer = new DisplayBuffer(x, y, width, height, this, zIndex);
@@ -13,7 +16,8 @@ const BufferManager = function() {
 
 	const setSize = () => {
 		screenWidth = process.stdout.columns;
-		screenSize = screenWidth * process.stdout.rows;
+		screenHeight = process.stdout.rows;
+		screenSize = screenWidth * screenHeight;
 		screenCodes = new Uint16Array(screenSize);
 		screenCodes.fill(32);
 		screenFGs = new Uint32Array(screenSize);
@@ -26,13 +30,18 @@ const BufferManager = function() {
 		} while (i < screenSize);
 	}
 
-	let screenWidth, screenSize;
+	let screenWidth, screenHeight, screenSize;
 	let screenCodes, screenFGs, screenBGs, screenConstruction;
-	const getScreenIndex = (x, y) => y * screenWidth + x;
 	this.screenWidth = () => screenWidth;
+	this.screenHeight = () => screenHeight;
 	setSize();
+	const getScreenIndex = (x, y) => {
+		if (x < 0 || x > screenWidth - 1) return null;
+		if (y < 0 || y > screenHeight - 1) return null;
+		return y * screenWidth + x;
+	}
 
-	// Colors
+	// Colors - 32 bit integer
 	// 0000 0000 0000 0000 0000 0000 0000 0000
 	// [opacity] [       24 bit color        ]
 	const getOpacity = code => code >> 24;
@@ -111,9 +120,6 @@ const BufferManager = function() {
 	// Rendering
 	let currentRender = []; // array of strings and ANSI escape codes
 
-	const pendingBufferIds = new Set(); // when a buffer adds to its canvas, add its id to this set, remove when buffer.render()
-	this.registerToPending = bufferId => pendingBufferIds.add(bufferId);
-
 	const hexDebugString = color => {
 		if (!color) return '[none]';
 		const hex = getHex(color);
@@ -122,7 +128,7 @@ const BufferManager = function() {
 		return ANSI + '#' + '0'.repeat(6 - hexString.length) + hexString + resetColorString;
 	};
 
-	// Lists all the DrawObjects on a construction SLL
+	// Lists all the PointData objects in a construction SLL
 	const debugConstruction = construction => {
 		if (!construction.length) {
 			console.log('this construction is empty');
@@ -136,17 +142,6 @@ const BufferManager = function() {
 				if (key == 'fg' || key == 'bg') {
 					logArray.push(hexDebugString(value), getOpacity(value));
 				} else logArray.push(value);
-				// if (key == 'pointData') {
-				// 	console.log('    point data:');
-				// 	for (const nestedKey of Object.keys(value)) {
-				// 		const nestedLogArray = ['     ', nestedKey];
-				// 		const nestedValue = value[nestedKey];
-				// 		if (nestedKey != 'code') nestedLogArray.push(hexDebugString(nestedValue), getOpacity(nestedValue));
-				// 		else nestedLogArray.push(nestedValue);
-				// 		console.log(...nestedLogArray);
-				// 	}
-				// 	continue;
-				// } else logArray.push(value);
 				console.log(...logArray);
 			}
 			console.log();
@@ -243,7 +238,8 @@ const BufferManager = function() {
 				outputFgRGBA = layerColorsRGBA(outputFgRGBA, outputBgRGBA);
 				outputFg = setRGBA(outputFgRGBA);
 			}
-		}
+		} else if (fgOpacityAConcern) // When there's just a foreground on nothing
+			outputFg = setRGBA(layerColorsRGBA(getRGBA(outputFg), getRGBA(100 << 24)));
 
 		return new PointData(outputCode, outputFg, outputBg);
 	}
@@ -283,33 +279,27 @@ const BufferManager = function() {
 
 	this.applyToConstruction = function(code, fg, bg, x, y, id, zIndex) {
 		const screenIndex = getScreenIndex(x, y);
+		if (screenIndex == null) return null;
 		const construction = screenConstruction.at(screenIndex);
 
 		if (code) construction.addSorted(id, zIndex, new PointData(code, fg, bg));
 		else construction.deleteById(id);
-		return construction;
+		return screenIndex;
 	}
 
-	this.requestDraw = function(code, fg, bg, x, y, id, zIndex, debug) {
-		const construction = this.applyToConstruction(...arguments);
-		if (debug) {
-			process.stdout.cursorTo(7, 8);
-			console.log(resetColorString);
-			debugConstruction(construction);
-		}
+	this.requestDraw = function(code, fg, bg, x, y, id, zIndex) {
+		const screenIndex = this.applyToConstruction(...arguments);
+		if (screenIndex == null) return;
+		const construction = screenConstruction.at(screenIndex);
 		const determinedOutput = determineConstructionOutput(construction);
 		addToCurrentRender(determinedOutput, x, y);
 	}
 
-	this.applyConstructionChanges = function(affectedIndeces) {
-		process.stdout.cursorTo(0, 0);
-		affectedIndeces.forEach(screenIndex => {
-			const construction = screenConstruction.at(screenIndex);
-			const determinedOutput = determineConstructionOutput(construction);
-			const x = screenIndex % screenWidth;
-			const y = Math.floor(screenIndex / screenWidth);
-			addToCurrentRender(determinedOutput, x, y);
-		});
+	const ghostRenderIndeces = new Set();
+	this.requestGhostDraw = function(code, fg, bg, x, y, id, zIndex) {
+		const screenIndex = this.applyToConstruction(...arguments);
+		if (screenIndex == null) return;
+		ghostRenderIndeces.add(screenIndex);
 	}
 
 	this.executeRenderOutput = function() {
@@ -318,20 +308,29 @@ const BufferManager = function() {
 		currentRender = [];
 	}
 
+	this.executeGhostRender = function() {
+		ghostRenderIndeces.forEach(screenIndex => {
+			const construction = screenConstruction.at(screenIndex);
+			const determinedOutput = determineConstructionOutput(construction);
+			const x = screenIndex % screenWidth;
+			const y = Math.floor(screenIndex / screenWidth);
+			addToCurrentRender(determinedOutput, x, y);
+		});
+		this.executeRenderOutput();
+		ghostRenderIndeces.clear();
+	}
+
 	this.massRender = function() {
-		const affectedLocations = new Set();
+		if (this.pauseRenders) return;
 		for (const buffer of createdBuffers) {
 			if (buffer.persistent) continue;
-			const renderLocations = buffer.ghostRender();
-			for (const index of renderLocations) affectedLocations.add(index);
+			buffer.ghostRender();
 		}
-		this.applyConstructionChanges(affectedLocations);
-		this.executeRenderOutput();
+		this.executeGhostRender();
 	}
 
 	this.clearScreen = function() { // The manager needs to know when the screen is cleared
-		process.stdout.write(resetColorString + '\x1b[2J' + '\x1b[?25l');
-		process.stdout.cursorTo(0, 0);
+		process.stdout.write(clearScreenString);
 		consoleRenderData = { x: null, y: null, fg: 0, bg: 0 };
 		screenCodes.fill(32);
 		screenFGs.fill(0);
@@ -366,7 +365,7 @@ const BufferManager = function() {
 	// this.renderAll()    Renders all buffers, ignoring persistence
 	//                     This is to be called after you call this.clearScreen()
 
-	/*
+	/* DEPRICATED
 	this.createScreenConstruction = function() {
 		const start = Date.now();
 		screenConstruction = [];

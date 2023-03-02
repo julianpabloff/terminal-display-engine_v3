@@ -1,22 +1,60 @@
 const BufferTools = function(manager) {
+	// COLOR TOOLS
+	// 0000 0000 0000 0000 0000 0000 0000 0000
+	// [opacity] [       24 bit color        ]
+	const getOpacity = code => code >> 24;
+	const getHex = code => code & 0xffffff;
+
 	this.hex = (hex, opacity = 100) => hex + (opacity << 24);
 	this.rgba = (r, g, b, a = 100) => (a << 24) + (r << 16) + (g << 8) + b;
 
-	// Common colors
-	this.colors = {
-		'white': this.hex(0xffffff),
-		'gray': this.hex(0x7f7f7f),
-		'red': this.hex(0xff0000),
-		'yellow': this.hex(0xffff00),
-		'green': this.hex(0x00ff00),
-		'cyan': this.hex(0x00ffff),
-		'blue': this.hex(0x0000ff),
-		'magenta': this.hex(0xff00ff),
+	// Common colors - add your own!
+	const colorPresets = {
+		white: 0xffffff,
+		gray: 0x7f7f7f,
+		black: 0,
+		red: 0xff0000,
+		yellow: 0xffff00,
+		green: 0x00ff00,
+		cyan: 0x00ffff,
+		blue: 0x0000ff,
+		magenta: 0xff00ff,
+	};
+
+	// e.x. tools.colors.red => 0xff0000 100%, tools.color('red', 60) => 0xff0000 60%
+	this.color = (name, opacity = 100) => colorPresets[name] + (opacity << 24);
+	this.colors = {};
+	for (const name of Object.keys(colorPresets))
+		this.colors[name] = this.hex(colorPresets[name]);
+
+	// Random color
+	const randomHex = () => {
+		const randomPrimary = () => Math.floor(Math.random() * 256);
+		return (randomPrimary() << 16) + (randomPrimary() << 8) + randomPrimary();
+	}
+	this.randomColor = (opacity = 100) => this.hex(randomHex(), opacity);
+	this.colors.random = () => this.hex(randomHex());
+
+	// Flips hex portion of color while maintaining opacity
+	this.getNegative = color => {
+		const negativeHex = 0xffffff - (color & 0xffffff);
+		return negativeHex + ((color >> 24) << 24);
+		// const opacity = color >> 24;
+		// const negativeColor = negativeHex + (opacity << 24);
+		// return negativeColor;
+	}
+
+	// Output: #ff0000 80%
+	this.hexDebugString = color => {
+		if (!color) return '[none]';
+		const hex = color & 0xffffff;
+		const hexString = hex.toString(16);
+		const opacity = (color >> 24).toString();
+		return `#${'0'.repeat(6 - hexString.length)}${hexString} ${opacity}%`;
 	};
 
 	// Generates an array of [count] length of color codes linearly interpolated from [color1] to [color2]
 	// [inclusive = false] is for chaining linear gradients, preventing the stop of a grad and start of the next from being duplicated
-	//   - makes the color change rate longer, as if there was one extra count, but still cuts it off at the count
 	this.linearGradient = function(color1, color2, count, inclusive = true) {
 		const hex1 = color1 & 0xffffff;
 		let r = hex1 >> 16;
@@ -69,6 +107,11 @@ const BufferTools = function(manager) {
 		return output;
 	}
 
+	// POSITIONING TOOLS
+	this.centerWidth = width => Math.floor(manager.screenWidth / 2 - width / 2);
+	this.centerHeight = height => Math.floor(manager.screenHeight / 2 - height / 2);
+
+	// BUFFER DRAWING TOOLS
 	this.outline = function(buffer, color = manager.fg, doubleLine = false) {
 		let sq = {tl: '┌', h: '─', tr: '┐', v: '│', bl: '└', br: '┘'};
 		if (doubleLine) sq = {tl: '╔', h: '═', tr: '╗', v: '║', bl: '╚', br: '╝'}
