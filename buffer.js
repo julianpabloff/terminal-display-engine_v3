@@ -13,6 +13,8 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 	// this.id = assigned by manager
 
 	// TODO: Move variables to private:
+	const bufferWidth = width;
+	const bufferHeight = height;
 	const bufferSize = width * height;
 
 	// Just an idea, just more abstraction, would bring back this.show() and this.hide()
@@ -36,53 +38,81 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 	}
 
 	// Writing to buffer
-	let cursorIndex = 0;
 	const coordinateIndex = (x, y) => (y * this.width) + x;
+	const coordinateIndexNew = (x, y) => {
+		if (x < 0 || x >= bufferWidth) return null;
+		if (y < 0 || y >= bufferHeight) return null;
+		return (y * bufferWidth) + x;
+	}
+	let cursorIndex = 0;
 	this.cursorTo = (x, y) => cursorIndex = coordinateIndex(x, y);
 
-	// Overall opacity gets multiplied to the drawing opacity (manager.fadeColor)
-	this.opacity = 100;
-	// TODO: wrapping when drawing
 	this.wrap = false;
+	this.opacity = 100;
 
-	this.print = function(string, index, fg, bg) {
-		let inheritCurrentBg = false;
+	const processBrush = (fg, bg) => {
+		let inheritBG = false;
 		if (fg == null) fg = manager.fg;
 		if (bg == null) {
 			bg = manager.bg;
-			inheritCurrentBg = !manager.bg;
+			inheritBG = !manager.bg;
 		}
 		if (this.opacity < 100) {
 			fg = manager.fadeColor(fg, this.opacity);
 			bg = manager.fadeColor(bg, this.opacity);
 		}
-
-		const stringLength = string.length;
-		let i = index;
-		let stringIndex = 0;
-		while (stringIndex < stringLength && i < bufferSize) {
-			canvasCodes[i] = string.charCodeAt(stringIndex);
-			canvasFGs[i] = fg;
-			if (!inheritCurrentBg) canvasBGs[i] = bg;
-			stringIndex++;
-			i++;
+		return {
+			fg: fg,
+			bg: bg,
+			inheritBG: inheritBG
 		}
-		cursorIndex += stringLength;
-		if (cursorIndex >= bufferSize) cursorIndex = 0;
 	}
 	this.write = function(string, fg = null, bg = null) {
-		this.print(string, cursorIndex, fg, bg);
+		const brushSettings = processBrush(fg, bg);
+		let i = 0;
+		let startIndex = cursorIndex;
+		const stringLength = string.length;
+		const available = this.width - cursorIndex % this.width;
+		do { // Loop through string
+			const progress = cursorIndex - startIndex;
+			if (!this.wrap && progress >= available) {
+				break;
+			}
+			canvasCodes[cursorIndex] = string.charCodeAt(i);
+			canvasFGs[cursorIndex] = brushSettings.fg;
+			if (!brushSettings.inheritBG) canvasBGs[cursorIndex] = brushSettings.bg;
+			cursorIndex++;
+			if (cursorIndex >= bufferSize) {
+				cursorIndex = 0;
+				break;
+			}
+			i++;
+		} while (i < stringLength);
 		return this;
 	}
 	this.draw = function(string, x, y, fg = null, bg = null) {
-		this.cursorTo(x, y);
-		this.print(string, cursorIndex, fg, bg);
+		const brushSettings = processBrush(fg, bg);
+		let currentX = x;
+		let i = 0;
+		const stringLength = string.length;
+		do { // Loop through string
+			const index = coordinateIndexNew(currentX, y);
+			if (index != null) {
+				canvasCodes[index] = string.charCodeAt(i);
+				canvasFGs[index] = brushSettings.fg;
+				if (!brushSettings.inheritBG) canvasBGs[index] = brushSettings.bg;
+				cursorIndex = index + 1;
+			}
+			currentX++;
+			i++;
+		} while (i < stringLength);
 		return this;
 	}
 
 	this.centerWidth = width => Math.floor(this.width / 2 - width / 2);
 	this.centerHeight = height => Math.floor(this.height / 2 - height / 2);
 
+	// Rendering
 	this.render = function(paint = false) {
 		if (manager.pauseRenders || this.pauseRenders) return;
 		this.empty = true;
