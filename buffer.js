@@ -8,11 +8,13 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 	this.size = width * height;
 	this.zIndex = zIndex;
 	this.empty = true; // are the current arrays empty?
-	this.persistent = false; // makes the screen switching algorithm ignore this buffer, you won't have to draw to it for it to be maintained after the screen switch
+	this.persistent = false; // makes manager.massRender ignore this buffer, it won't disappear
 	this.pauseRenders = false;
-	// this.id = assigned by manager
+	// this.id = assigned by manager, don't change
 
-	// TODO: Move variables to private:
+	// Private variables for internal reference
+	let bufferX = x;
+	let bufferY = y;
 	const bufferWidth = width;
 	const bufferHeight = height;
 	const bufferSize = width * height;
@@ -38,14 +40,16 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 	}
 
 	// Writing to buffer
-	const coordinateIndex = (x, y) => (y * this.width) + x;
-	const coordinateIndexNew = (x, y) => {
+	const coordinateIndex = (x, y) => {
 		if (x < 0 || x >= bufferWidth) return null;
 		if (y < 0 || y >= bufferHeight) return null;
 		return (y * bufferWidth) + x;
 	}
 	let cursorIndex = 0;
-	this.cursorTo = (x, y) => cursorIndex = coordinateIndex(x, y);
+	this.cursorTo = (x, y) => {
+		const index = coordinateIndex(x, y);
+		if (index != null) cursorIndex = index;
+	}
 
 	this.wrap = false;
 	this.opacity = 100;
@@ -72,7 +76,7 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 		let i = 0;
 		let startIndex = cursorIndex;
 		const stringLength = string.length;
-		const available = this.width - cursorIndex % this.width;
+		const available = bufferWidth - cursorIndex % bufferWidth;
 		do { // Loop through string
 			const progress = cursorIndex - startIndex;
 			if (!this.wrap && progress >= available) {
@@ -96,7 +100,7 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 		let i = 0;
 		const stringLength = string.length;
 		do { // Loop through string
-			const index = coordinateIndexNew(currentX, y);
+			const index = coordinateIndex(currentX, y);
 			if (index != null) {
 				canvasCodes[index] = string.charCodeAt(i);
 				canvasFGs[index] = brushSettings.fg;
@@ -108,9 +112,15 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 		} while (i < stringLength);
 		return this;
 	}
+	this.drawAbsolute = function(string, screenX, screenY, fg = null, bg = null) {
+		const x = screenX - bufferX;
+		const y = screenY - bufferY;
+		this.draw(string, x, y, fg, bg);
+		return this;
+	}
 
-	this.centerWidth = width => Math.floor(this.width / 2 - width / 2);
-	this.centerHeight = height => Math.floor(this.height / 2 - height / 2);
+	this.centerWidth = width => Math.floor(bufferWidth / 2 - width / 2);
+	this.centerHeight = height => Math.floor(bufferHeight / 2 - height / 2);
 
 	// Rendering
 	this.render = function(paint = false) {
@@ -136,8 +146,8 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 				} else if (code && !bg) bg = currentBg;
 			}
 
-			const screenX = this.x + (i % this.width);
-			const screenY = this.y + Math.floor(i / this.width);
+			const screenX = bufferX + (i % bufferWidth);
+			const screenY = bufferY + Math.floor(i / bufferWidth);
 
 			if (code != currentCode || fg != currentFg || bg != currentBg)
 				manager.requestDraw(code, fg, bg, screenX, screenY, this.id, this.zIndex);
@@ -150,21 +160,20 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 			canvasFGs[i] = 0;
 			canvasBGs[i] = 0;
 			i++;
-		} while (i < this.size);
+		} while (i < bufferSize);
 		manager.executeRenderOutput(this.id);
 	}
-
 	this.paint = () => this.render(true);
 
 	this.fill = function(color) {
-		canvasCodes.fill(32); // If there aren't spaces, that counts as an erasal
+		canvasCodes.fill(32);
 		if (this.opacity < 100) color = manager.fadeColor(color, this.opacity);
 		canvasBGs.fill(color);
-		// manager.setBg(color);
 		return this;
 	}
 
-	this.ghostRender = function() { // only changes the screen construction
+	// Changes only the screen construction, called by manager only
+	this.ghostRender = function() {
 		this.empty = true;
 		let i = 0;
 		do { // Loop through buffer
@@ -175,8 +184,8 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 			const currentFg = currentFGs.at(i);
 			const currentBg = currentBGs.at(i);
 
-			const screenX = this.x + (i % this.width);
-			const screenY = this.y + Math.floor(i / this.width);
+			const screenX = bufferX + (i % bufferWidth);
+			const screenY = bufferY + Math.floor(i / bufferWidth);
 
 			if (code != currentCode || fg != currentFg || bg != currentBg)
 				manager.requestGhostDraw(code, fg, bg, screenX, screenY, this.id, this.zIndex);
@@ -189,23 +198,21 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 			canvasFGs[i] = 0;
 			canvasBGs[i] = 0;
 			i++;
-		} while (i < this.size);
+		} while (i < bufferSize);
 	}
 
-	// Should really only be used to position buffers relative to the screen size
-	// For moving objects just make a buffer for the object to move around in
 	this.move = function(x, y, renderDestination = true) {
-		if (renderDestination && x == this.x && y == this.y) return;
+		if (renderDestination && x == bufferX && y == bufferY) return;
 		if (!this.empty) {
 			let i = 0;
 			do { // Loop through buffer
 				const code = currentCodes.at(i);
 				const fg = currentFGs.at(i);
 				const bg = currentBGs.at(i);
-				const eraseX = this.x + (i % this.width);
-				const eraseY = this.y + Math.floor(i / this.width);
-				const drawX = x + (i % this.width);
-				const drawY = y + Math.floor(i / this.width);
+				const eraseX = bufferX + (i % bufferWidth);
+				const eraseY = bufferY + Math.floor(i / bufferWidth);
+				const drawX = x + (i % bufferWidth);
+				const drawY = y + Math.floor(i / bufferWidth);
 
 				const noOverlapX = eraseX < x || eraseX > x + this.end;
 				const noOverlapY = eraseY < y || eraseY > y + this.bottom;
@@ -214,11 +221,11 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 				if (renderDestination)
 					manager.requestGhostDraw(code, fg, bg, drawX, drawY, this.id, this.zIndex);
 				i++;
-			} while (i < this.size);
+			} while (i < bufferSize);
 			manager.executeGhostRender();
 		}
-		this.x = x;
-		this.y = y;
+		this.x = bufferX = x;
+		this.y = bufferY = y;
 	}
 }
 

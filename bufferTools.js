@@ -39,9 +39,6 @@ const BufferTools = function(manager) {
 	this.getNegative = color => {
 		const negativeHex = 0xffffff - (color & 0xffffff);
 		return negativeHex + ((color >> 24) << 24);
-		// const opacity = color >> 24;
-		// const negativeColor = negativeHex + (opacity << 24);
-		// return negativeColor;
 	}
 
 	// Output: #ff0000 80%
@@ -108,8 +105,8 @@ const BufferTools = function(manager) {
 	}
 
 	// POSITIONING TOOLS
-	this.centerWidth = width => Math.floor(manager.screenWidth / 2 - width / 2);
-	this.centerHeight = height => Math.floor(manager.screenHeight / 2 - height / 2);
+	this.centerWidth = width => Math.floor(manager.screenWidth() / 2 - width / 2);
+	this.centerHeight = height => Math.floor(manager.screenHeight() / 2 - height / 2);
 
 	// BUFFER DRAWING TOOLS
 	this.outline = function(buffer, color = manager.fg, doubleLine = false) {
