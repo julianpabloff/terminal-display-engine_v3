@@ -1,6 +1,5 @@
 const DisplayBuffer = require('./buffer.js');
 const SLL = require('./sll.js');
-const log = string => process.stdout.write('\n' + string);
 
 const BufferManager = function() {
 	const clearScreenString = '\x1b[0m\x1b[?25l\x1b[2J\x1b[3J\x1b[1;1H';
@@ -46,12 +45,6 @@ const BufferManager = function() {
 	// [opacity] [       24 bit color        ]
 	const getOpacity = code => code >> 24;
 	const getHex = code => code & 0xffffff;
-	const getRGBA = code => {
-		const hex = getHex(code);
-		return { r: hex >> 16, g: (hex >> 8) & 0xFF, b: hex & 0xFF, a: getOpacity(code) };
-	};
-	// meant to take in decimal values of RGB during opacity calculations
-	const setRGBA = rgba => (Math.round(rgba.a) << 24) + (Math.round(rgba.r) << 16) + (Math.round(rgba.g) << 8) + Math.round(rgba.b);
 
 	this.fadeColor = (color, opacity) => { // fades color to buffer opacity
 		const newOpacity = Math.floor(getOpacity(color) * (opacity / 100));
@@ -212,6 +205,11 @@ const BufferManager = function() {
 				a: 100
 			}
 		}
+		const getRGBA = color => {
+			const hex = getHex(color);
+			return { r: hex >> 16, g: (hex >> 8) & 0xFF, b: hex & 0xFF, a: getOpacity(color) };
+		};
+		const setRGBA = rgba => (Math.round(rgba.a) << 24) + (Math.round(rgba.r) << 16) + (Math.round(rgba.g) << 8) + Math.round(rgba.b);
 
 		if (bgStack.length) {
 			outputBg = bgStack.at(0);
@@ -289,17 +287,26 @@ const BufferManager = function() {
 
 	this.requestDraw = function(code, fg, bg, x, y, id, zIndex) {
 		const screenIndex = this.applyToConstruction(...arguments);
-		if (screenIndex == null) return;
+		if (screenIndex == null) return false;
 		const construction = screenConstruction.at(screenIndex);
 		const determinedOutput = determineConstructionOutput(construction);
 		addToCurrentRender(determinedOutput, x, y);
+		return code != 0;
+	}
+
+	this.isInConstruction = function(x, y, id) {
+		const screenIndex = getScreenIndex(x, y);
+		if (screenIndex == null) return null;
+		const construction = screenConstruction.at(screenIndex);
+		return construction.has(id);
 	}
 
 	const ghostRenderIndeces = new Set();
 	this.requestGhostDraw = function(code, fg, bg, x, y, id, zIndex) {
 		const screenIndex = this.applyToConstruction(...arguments);
-		if (screenIndex == null) return;
+		if (screenIndex == null) return false;
 		ghostRenderIndeces.add(screenIndex);
+		return code != 0;
 	}
 
 	this.executeRenderOutput = function() {
@@ -322,10 +329,7 @@ const BufferManager = function() {
 
 	this.massRender = function() {
 		if (this.pauseRenders) return;
-		for (const buffer of createdBuffers) {
-			if (buffer.persistent) continue;
-			buffer.ghostRender();
-		}
+		for (const buffer of createdBuffers) buffer.ghostRender();
 		this.executeGhostRender();
 	}
 
@@ -338,12 +342,13 @@ const BufferManager = function() {
 		for (const buffer of createdBuffers) buffer.clearCurrent();
 	}
 
+	this.pauseRenders = false;
 	this.handleResize = function() {
 		this.clearScreen();
 		setSize();
 	}
 
-	this.pauseRenders = false;
+	// IDEAS
 
 	// this.massRender()    Renders all created buffers, unless the buffer is persistent. Useful
 	//                      for "screen switching," switching between groups of buffers while
@@ -358,46 +363,15 @@ const BufferManager = function() {
 	//                                     key equal to <name>. An array of buffers can be provided,
 	//                                     which would take the place of the empty array
 
-	// this.addToGroup(name, buffer)
+	// Since the group items are pointers, a buffer can be a member of any amount of groups
+
+	// this.addToGroup(name, buffer) => groups[name].add(buffer)
+	// this.removeFromGroup(name, bufferId)
 
 	// this.renderGroup(name) => this.massRender(groups[name]);
 
 	// this.renderAll()    Renders all buffers, ignoring persistence
 	//                     This is to be called after you call this.clearScreen()
-
-	/* DEPRICATED
-	this.createScreenConstruction = function() {
-		const start = Date.now();
-		screenConstruction = [];
-		const pendingBuffers = [];
-		pendingBufferIds.forEach(id => pendingBuffers.push(createdBuffers.at(id)));
-
-		let i = 0;
-		do { // Loop through the screen
-			const construction = new SLL();
-
-			const screenX = i % screenWidth;
-			const screenY = Math.floor(i / screenWidth);
-			pendingBuffers.forEach(buffer => {
-				const bufferIndex = buffer.screenToIndex(screenX, screenY);
-				if (bufferIndex != null) {
-					const pointData = buffer.canvasLookup(bufferIndex);
-					const id = buffer.id;
-					const zIndex = buffer.zIndex;
-					construction.addSorted(id, zIndex, pointData);
-				}
-			});
-			screenConstruction.push(construction);
-			const determinedOutput = determineConstructionOutput(construction);
-			addToCurrentRender(determinedOutput, screenX, screenY);
-			i++;
-		} while (i < screenSize);
-		pendingBuffers.forEach(buffer => buffer.transferCanvas());
-		const time = Date.now() - start;
-		setTimeout(() => { console.log('render took', time, 'ms')}, 500);
-		this.executeRenderOutput();
-	}
-	*/
 }
 
 module.exports = BufferManager;
