@@ -82,13 +82,13 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 		const available = bufferWidth - cursorIndex % bufferWidth;
 		do { // Loop through string
 			const progress = cursorIndex - startIndex;
-			if (!this.wrap && progress >= available) {
-				break;
-			}
+			if (!this.wrap && progress >= available) break;
+
 			canvasCodes[cursorIndex] = string.charCodeAt(i);
 			canvasFGs[cursorIndex] = brushSettings.fg;
 			if (!brushSettings.inheritBG) canvasBGs[cursorIndex] = brushSettings.bg;
 			if (canvasEmpty) canvasEmpty = false;
+
 			cursorIndex++;
 			if (cursorIndex >= bufferSize) {
 				cursorIndex = 0;
@@ -146,7 +146,7 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 	this.centerHeight = height => Math.floor(bufferHeight / 2 - height / 2);
 
 	// Rendering
-	this.render = function(paint = false, debug = false) {
+	this.render = function(paint = false) {
 		if (manager.pauseRenders || this.pauseRenders) return;
 		if (!inConstruction && canvasEmpty) return;
 		inConstruction = false;
@@ -155,35 +155,31 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 			const code = canvasCodes.at(i);
 			const fg = canvasFGs.at(i);
 			let bg = canvasBGs.at(i);
+			canvasCodes[i] = 0;
+			canvasFGs[i] = 0;
+			canvasBGs[i] = 0;
 			const currentCode = currentCodes.at(i);
 			const currentFg = currentFGs.at(i);
 			const currentBg = currentBGs.at(i);
+			currentCodes[i] = code;
+			currentFGs[i] = fg;
+			currentBGs[i] = bg;
 
 			// Paint functionality
 			if (paint) {
 				if (!code && currentCode) {
-					canvasCodes[i] = 0;
-					canvasFGs[i] = 0;
-					canvasBGs[i] = 0;
 					i++;
 					continue;
 				} else if (code && !bg) bg = currentBg;
 			}
 
-			const screenX = bufferX + (i % bufferWidth);
-			const screenY = bufferY + Math.floor(i / bufferWidth);
-
 			let enteredConstruction = false;
-			if (code != currentCode || fg != currentFg || bg != currentBg)
+			if (code != currentCode || fg != currentFg || bg != currentBg) {
+				const screenX = bufferX + (i % bufferWidth);
+				const screenY = bufferY + Math.floor(i / bufferWidth);
 				enteredConstruction = manager.requestDraw(code, fg, bg, screenX, screenY, this.id, bufferZ);
+			}
 			if (enteredConstruction && !inConstruction) inConstruction = true;
-
-			currentCodes[i] = code;
-			currentFGs[i] = fg;
-			currentBGs[i] = bg;
-			canvasCodes[i] = 0;
-			canvasFGs[i] = 0;
-			canvasBGs[i] = 0;
 			i++;
 		} while (i < bufferSize);
 		canvasEmpty = true;
@@ -273,9 +269,15 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 			const code = canvasCodes.at(i);
 			const fg = canvasFGs.at(i);
 			const bg = canvasBGs.at(i);
+			canvasCodes[i] = 0;
+			canvasFGs[i] = 0;
+			canvasBGs[i] = 0;
 			const currentCode = currentCodes.at(i);
 			const currentFg = currentFGs.at(i);
 			const currentBg = currentBGs.at(i);
+			currentCodes[i] = code;
+			currentFGs[i] = fg;
+			currentBGs[i] = bg;
 
 			const screenX = bufferX + (i % bufferWidth);
 			const screenY = bufferY + Math.floor(i / bufferWidth);
@@ -285,12 +287,6 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 				enteredConstruction = manager.requestGhostDraw(code, fg, bg, screenX, screenY, this.id, bufferZ);
 			if (enteredConstruction && !inConstruction) inConstruction = true;
 
-			currentCodes[i] = code;
-			currentFGs[i] = fg;
-			currentBGs[i] = bg;
-			canvasCodes[i] = 0;
-			canvasFGs[i] = 0;
-			canvasBGs[i] = 0;
 			i++;
 		} while (i < bufferSize);
 		canvasEmpty = true;
