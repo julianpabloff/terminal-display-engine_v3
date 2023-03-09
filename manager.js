@@ -8,8 +8,8 @@ const BufferManager = function() {
 	const createdBuffers = [];
 	this.createBuffer = function(x, y, width, height, zIndex = 0) {
 		const buffer = new DisplayBuffer(x, y, width, height, this, zIndex);
+		buffer.id = createdBuffers.length;
 		createdBuffers.push(buffer);
-		buffer.id = createdBuffers.length - 1;
 		return buffer;
 	}
 
@@ -21,19 +21,20 @@ const BufferManager = function() {
 		screenCodes.fill(32);
 		screenFGs = new Uint32Array(screenSize);
 		screenBGs = new Uint32Array(screenSize);
-		screenConstruction = [];
+		screenConstruction = new Array(screenSize);
 		let i = 0;
 		do {
-			screenConstruction.push(new SLL());
+			screenConstruction[i] = new SLL();
 			i++;
 		} while (i < screenSize);
 	}
-
 	let screenWidth, screenHeight, screenSize;
 	let screenCodes, screenFGs, screenBGs, screenConstruction;
+	setSize();
+
 	this.screenWidth = () => screenWidth;
 	this.screenHeight = () => screenHeight;
-	setSize();
+
 	const getScreenIndex = (x, y) => {
 		if (x < 0 || x > screenWidth - 1) return null;
 		if (y < 0 || y > screenHeight - 1) return null;
@@ -46,25 +47,24 @@ const BufferManager = function() {
 	const getOpacity = code => code >> 24;
 	const getHex = code => code & 0xffffff;
 
-	this.fadeColor = (color, opacity) => { // fades color to buffer opacity
-		const newOpacity = Math.floor(getOpacity(color) * (opacity / 100));
-		return getHex(color) + (newOpacity << 24);
-	}
-
 	this.fg = (100 << 24) + (255 << 16) + (255 << 8) + 255; // White default
 	this.bg = 0;
-	let consoleRenderData = { x: null, y: null, fg: 0, bg: 0 };
 
 	this.setFg = colorCode => this.fg = colorCode;
 	this.setBg = colorCode => this.bg = colorCode;
 	this.setColor = (fgCode, bgCode) => { this.fg = fgCode; this.bg = bgCode };
 
+	this.fadeColor = (color, opacity) => { // fades color to buffer opacity
+		const newOpacity = Math.floor(getOpacity(color) * (opacity / 100));
+		return getHex(color) + (newOpacity << 24);
+	}
+
 	const hexToRGB = hex => { return {r: hex >> 16, g: (hex >> 8) & 0xFF, b: hex & 0xFF} };
 	const rgbToHex = (r, g, b) => (r << 16) + (g << 8) + b;
-	const fgHexToString = hex => '\x1b[38;2;' + (hex >> 16).toString() + ';' + ((hex >> 8) & 0xFF).toString() + ';' + (hex & 0xFF).toString() + 'm';
-	const bgHexToString = hex => '\x1b[48;2;' + (hex >> 16).toString() + ';' + ((hex >> 8) & 0xFF).toString() + ';' + (hex & 0xFF).toString() + 'm';
 	const resetColorString = '\x1b[0m';
 	const moveCursorString = (x, y) => '\x1b[' + (y + 1).toString() + ';' + (x + 1).toString() + 'H';
+	const fgHexToString = hex => '\x1b[38;2;' + (hex >> 16).toString() + ';' + ((hex >> 8) & 0xFF).toString() + ';' + (hex & 0xFF).toString() + 'm';
+	const bgHexToString = hex => '\x1b[48;2;' + (hex >> 16).toString() + ';' + ((hex >> 8) & 0xFF).toString() + ';' + (hex & 0xFF).toString() + 'm';
 
 	// Color conversion
 	// 256 color terminals
@@ -110,8 +110,118 @@ const BufferManager = function() {
 	const fg256ToString = code => '\x1b[38;5;' + code.toString() + 'm';
 	const bg256ToString = code => '\x1b[48;5;' + code.toString() + 'm';
 
+	// 8 color terminals
+	const hexToHSV = hex => {
+		const rgb = hexToRGB(hex);
+		const r = rgb.r / 255;
+		const g = rgb.g / 255;
+		const b = rgb.b / 255;
+		const min = Math.min(r, g, b);
+		const max = Math.max(r, g, b);
+		const delta = max - min;
+
+		let hue;
+		if (delta == 0) hue = 0;
+		else if (max == r) hue = 60 * (((g - b) / delta + 6) % 6);
+		else if (max == g) hue = 60 * ((b - r) / delta + 2);
+		else hue = 60 * ((r - g) / delta + 4);
+		const sat = (max == 0) ? 0 : delta / max;
+		const val = max;
+
+		return {h: hue, s: sat, v: val};
+	}
+	const hexTo8Color = hex => {
+		const hsv = hexToHSV(hex);
+		const hue = hsv.h;
+		let color;
+		if (hsv.s < 0.15) {
+			if (hsv.v < 0.6) color = 1;
+			else color = 8;
+		}
+		else if (hue < 30) color = 2;
+		else if (hue < 90) color = 4;
+		else if (hue < 150) color = 3;
+		else if (hue < 210) color = 7;
+		else if (hue < 270) color = 5;
+		else if (hue < 330) color = 6;
+		else color = 2;
+		return color;
+	}
+	// 1: black, 2: red, 3: green, 4: yellow, 5: blue, 6: magenta, 7: cyan, 8: white
+	const fg8ToString = code => '\x1b[' + (29 + code).toString() + 'm';
+	const bg8ToString = code => '\x1b[' + (39 + code).toString() + 'm';
+
 	// Rendering
 	let currentRender = []; // array of strings and ANSI escape codes
+	let consoleRenderData = { x: null, y: null, fg: 0, bg: 0 };
+
+	const PointData = function(code, fg, bg) {
+		this.code = code;
+		this.fg = fg;
+		this.bg = bg;
+	}
+
+	let colorMode = 0; // 0: 24 bit color, 1: 256 color mode, 2: 8 color mode
+	const ansiColorString = [
+		{ fg: hex => fgHexToString(hex), bg: hex => bgHexToString(hex) },
+		{ fg: hex => fg256ToString(hexTo256Color(hex)), bg: hex => bg256ToString(hexTo256Color(hex)) },
+		{ fg: hex => fg8ToString(hexTo8Color(hex)), bg: hex => bg8ToString(hexTo8Color(hex)) }
+	];
+
+	const addToCurrentRender = function(pointData, x, y) {
+		const code = pointData.code;
+		const fg = pointData.fg;
+		const bg = pointData.bg;
+
+		const fgChanged = fg != consoleRenderData.fg;
+		const bgChanged = bg != consoleRenderData.bg;
+		if (fgChanged || bgChanged) {
+			let reset = false;
+			if (!getOpacity(bg)) {
+				currentRender.push(resetColorString);
+				reset = true;
+			} else if (bgChanged)
+				currentRender.push(ansiColorString[colorMode].bg(getHex(bg)));
+			if ((fgChanged && getOpacity(fg)) || fg && reset)
+				currentRender.push(ansiColorString[colorMode].fg(getHex(fg)));
+		}
+		const moveCursorNecessary = !(y == consoleRenderData.y && x == consoleRenderData.x + 1);
+		if (moveCursorNecessary) currentRender.push(moveCursorString(x, y));
+		currentRender.push(String.fromCharCode(code));
+		consoleRenderData = { x: x, y: y, fg: fg, bg: bg };
+	}
+
+	const requestRender = function(pointData, x, y) {
+		const code = pointData.code;
+		const fg = pointData.fg;
+		const bg = pointData.bg;
+		const screenIndex = getScreenIndex(x, y);
+
+		if (
+			screenCodes.at(screenIndex) != code ||
+			screenFGs.at(screenIndex) != fg ||
+			screenBGs.at(screenIndex) != bg
+		)
+		addToCurrentRender(...arguments);
+
+		screenCodes[screenIndex] = code;
+		screenFGs[screenIndex] = fg;
+		screenBGs[screenIndex] = bg;
+	}
+
+	const flashScreen = function() {
+		currentRender.push(resetColorString);
+		let i = 0;
+		do { // Loop through screen
+			const code = screenCodes[i];
+			const fg = screenFGs[i];
+			const bg = screenBGs[i];
+			const x = i % screenWidth;
+			const y = Math.floor(i / screenWidth);
+			addToCurrentRender(new PointData(code, fg, bg), x, y);
+			i++;
+		} while (i < screenSize);
+	}
 
 	const hexDebugString = color => {
 		if (!color) return '[none]';
@@ -141,22 +251,10 @@ const BufferManager = function() {
 		});
 	}
 
-	const PointData = function(code, fg, bg) {
-		this.code = code;
-		this.fg = fg;
-		this.bg = bg;
-	}
-	const DrawObject = function(pointData, bufferId, zIndex) {
-		this.pointData = pointData; // PointData
-		this.bufferId = bufferId;
-		this.zIndex = zIndex;
-	}
-
 	const determineConstructionOutput = construction => {
 		let outputCode = 32;
 		let outputFg = 0;
 		let outputBg = 0;
-
 		let fgStackIndex = null;
 		let bgStack = [];
 		let fgOpacityAConcern = false;
@@ -167,7 +265,6 @@ const BufferManager = function() {
 			const code = item.code;
 			const fg = item.fg;
 			const bg = item.bg;
-
 			if (getOpacity(bg)) {
 				if (getOpacity(bg) == 100) {
 					outputCode = 32;
@@ -186,7 +283,6 @@ const BufferManager = function() {
 					index++;
 				}
 			}
-
 			if (code != 32 && getOpacity(fg)) { // only render the code if the fg shows
 				fgStackIndex = index;
 				fgOpacityAConcern = getOpacity(fg) < 100;
@@ -242,39 +338,6 @@ const BufferManager = function() {
 		return new PointData(outputCode, outputFg, outputBg);
 	}
 
-	const addToCurrentRender = function(pointData, x, y) {
-		const screenIndex = getScreenIndex(x, y);
-		const code = pointData.code;
-		const fg = pointData.fg;
-		const bg = pointData.bg;
-
-		let screenDifferent =
-			screenCodes.at(screenIndex) != code ||
-			screenFGs.at(screenIndex) != fg ||
-			screenBGs.at(screenIndex) != bg;
-
-		if (screenDifferent) {
-			const fgChanged = fg != consoleRenderData.fg;
-			const bgChanged = bg != consoleRenderData.bg;
-			if (fgChanged || bgChanged) {
-				let reset = false;
-				if (!getOpacity(bg)) {
-					currentRender.push(resetColorString);
-					reset = true;
-				} else if (bgChanged) currentRender.push(bgHexToString(getHex(bg)));
-				if ((fgChanged && getOpacity(fg)) || fg && reset) currentRender.push(fgHexToString(getHex(fg)));
-			}
-			const moveCursorNecessary = !(y == consoleRenderData.y && x == consoleRenderData.x + 1);
-			if (moveCursorNecessary) currentRender.push(moveCursorString(x, y));
-			currentRender.push(String.fromCharCode(code));
-			consoleRenderData = { x: x, y: y, fg: fg, bg: bg };
-		}
-
-		screenCodes[screenIndex] = code;
-		screenFGs[screenIndex] = fg;
-		screenBGs[screenIndex] = bg;
-	}
-
 	this.applyToConstruction = function(code, fg, bg, x, y, id, zIndex) {
 		const screenIndex = getScreenIndex(x, y);
 		if (screenIndex == null) return null;
@@ -290,7 +353,7 @@ const BufferManager = function() {
 		if (screenIndex == null) return false;
 		const construction = screenConstruction.at(screenIndex);
 		const determinedOutput = determineConstructionOutput(construction);
-		addToCurrentRender(determinedOutput, x, y);
+		requestRender(determinedOutput, x, y);
 		return code != 0;
 	}
 
@@ -321,7 +384,7 @@ const BufferManager = function() {
 			const determinedOutput = determineConstructionOutput(construction);
 			const x = screenIndex % screenWidth;
 			const y = Math.floor(screenIndex / screenWidth);
-			addToCurrentRender(determinedOutput, x, y);
+			requestRender(determinedOutput, x, y);
 		});
 		this.executeRenderOutput();
 		ghostRenderIndeces.clear();
@@ -346,6 +409,13 @@ const BufferManager = function() {
 	this.handleResize = function() {
 		this.clearScreen();
 		setSize();
+	}
+
+	const colorModeNames = ['24 bit', '256 color', '8 color'];
+	this.setColorMode = name => {
+		colorMode = colorModeNames.indexOf(name);
+		flashScreen();
+		this.executeRenderOutput();
 	}
 
 	// IDEAS
