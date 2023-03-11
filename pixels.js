@@ -25,8 +25,6 @@ const PixelEngine = function(manager, buffer) {
 		if (!renderMap.has(snapGrid)) {
 			renderMap.set(snapGrid, {x: bufferX, y: bufferY});
 		}
-		gridRenderIndeces.add(snapGridIndex(index));
-		bufferRenderIndeces.add(gridIndexToBufferIndex(index));
 	}
 
 	let cursorIndex = 0;
