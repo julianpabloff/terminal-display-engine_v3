@@ -76,10 +76,10 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 	this.write = function(string, fg = null, bg = null) {
 		if (!string.length) return this;
 		const brushSettings = processBrush(fg, bg);
-		let i = 0;
-		let startIndex = cursorIndex;
+		const startIndex = cursorIndex;
 		const stringLength = string.length;
 		const available = bufferWidth - cursorIndex % bufferWidth;
+		let i = 0;
 		do { // Loop through string
 			const progress = cursorIndex - startIndex;
 			if (!this.wrap && progress >= available) break;
@@ -140,6 +140,7 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 			}
 			i++;
 		} while (i < count);
+		return this;
 	}
 
 	this.centerWidth = width => Math.floor(bufferWidth / 2 - width / 2);
@@ -290,6 +291,11 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 			i++;
 		} while (i < bufferSize);
 		canvasEmpty = true;
+	}
+
+	this.enablePixels = function() {
+		const PixelEngine = require('./pixels.js');
+		this.pixel = new PixelEngine(manager, this);
 	}
 
 }

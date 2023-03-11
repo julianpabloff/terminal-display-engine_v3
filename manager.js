@@ -230,6 +230,7 @@ const BufferManager = function() {
 		const hexString = hex.toString(16);
 		return ANSI + '#' + '0'.repeat(6 - hexString.length) + hexString + resetColorString;
 	};
+	this.hexDebugString = color => hexDebugString(color);
 
 	// Lists all the PointData objects in a construction SLL
 	const debugConstruction = construction => {
@@ -338,38 +339,33 @@ const BufferManager = function() {
 		return new PointData(outputCode, outputFg, outputBg);
 	}
 
-	this.applyToConstruction = function(code, fg, bg, x, y, id, zIndex) {
-		const screenIndex = getScreenIndex(x, y);
-		if (screenIndex == null) return null;
+	const applyToConstruction = function(code, fg, bg, screenIndex, id, zIndex) {
 		const construction = screenConstruction.at(screenIndex);
-
-		if (code) construction.addSorted(id, zIndex, new PointData(code, fg, bg));
+		if (code) {
+			construction.addSorted(id, zIndex, new PointData(code, fg, bg));
+			return true;
+		}
 		else construction.deleteById(id);
-		return screenIndex;
+		return false;
 	}
 
 	this.requestDraw = function(code, fg, bg, x, y, id, zIndex) {
-		const screenIndex = this.applyToConstruction(...arguments);
+		const screenIndex = getScreenIndex(x, y);
 		if (screenIndex == null) return false;
+		const inConstruction = applyToConstruction(code, fg, bg, screenIndex, id, zIndex);
 		const construction = screenConstruction.at(screenIndex);
 		const determinedOutput = determineConstructionOutput(construction);
 		requestRender(determinedOutput, x, y);
-		return code != 0;
-	}
-
-	this.isInConstruction = function(x, y, id) {
-		const screenIndex = getScreenIndex(x, y);
-		if (screenIndex == null) return null;
-		const construction = screenConstruction.at(screenIndex);
-		return construction.has(id);
+		return inConstruction;
 	}
 
 	const ghostRenderIndeces = new Set();
 	this.requestGhostDraw = function(code, fg, bg, x, y, id, zIndex) {
-		const screenIndex = this.applyToConstruction(...arguments);
+		const screenIndex = getScreenIndex(x, y);
 		if (screenIndex == null) return false;
+		const inConstruction = applyToConstruction(code, fg, bg, screenIndex, id, zIndex);
 		ghostRenderIndeces.add(screenIndex);
-		return code != 0;
+		return inConstruction;
 	}
 
 	this.executeRenderOutput = function() {
