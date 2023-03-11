@@ -4,9 +4,14 @@ const BufferTools = function(manager) {
 	// [opacity] [       24 bit color        ]
 	const getOpacity = code => code >> 24;
 	const getHex = code => code & 0xffffff;
+	const checkOpacity = opacity => {
+		if (opacity < 0) return 0;
+		if (opacity > 100) return 100;
+		return opacity;
+	}
 
-	this.hex = (hex, opacity = 100) => hex + (opacity << 24);
-	this.rgba = (r, g, b, a = 100) => (a << 24) + (r << 16) + (g << 8) + b;
+	this.hex = (hex, opacity = 100) => hex + (checkOpacity(opacity) << 24);
+	this.rgba = (r, g, b, a = 100) => (checkOpacity(a) << 24) + (r << 16) + (g << 8) + b;
 
 	// Common colors - add your own!
 	const colorPresets = {
