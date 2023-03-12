@@ -74,15 +74,15 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 		}
 	}
 	this.write = function(string, fg = null, bg = null) {
-		if (!string.length) return this;
+		const stringLength = string.length;
+		if (!stringLength) return this;
 		const brushSettings = processBrush(fg, bg);
 		const startIndex = cursorIndex;
-		const stringLength = string.length;
 		const available = bufferWidth - cursorIndex % bufferWidth;
 		let i = 0;
 		do { // Loop through string
 			const progress = cursorIndex - startIndex;
-			if (!this.wrap && progress >= available) break;
+			if (!this.wrap && progress >= available) return this;
 
 			canvasCodes[cursorIndex] = string.charCodeAt(i);
 			canvasFGs[cursorIndex] = brushSettings.fg;
@@ -92,18 +92,18 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 			cursorIndex++;
 			if (cursorIndex >= bufferSize) {
 				cursorIndex = 0;
-				break;
+				return this;
 			}
 			i++;
 		} while (i < stringLength);
 		return this;
 	}
 	this.draw = function(string, x, y, fg = null, bg = null) {
-		if (!string.length) return this;
+		const stringLength = string.length;
+		if (!stringLength) return this;
 		const brushSettings = processBrush(fg, bg);
 		let index;
 		let i = 0;
-		const stringLength = string.length;
 		do { // Loop through string
 			if (this.wrap) index = coordinateIndex(x, y) + i;
 			else index = coordinateIndex(x + i, y);
@@ -147,6 +147,12 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 	this.centerHeight = height => Math.floor(bufferHeight / 2 - height / 2);
 
 	// Rendering
+	// TODO: What if instead of looping through the entire buffer, you stored the indeces
+	// that you need to check - the indeces width canvasCodes and the indeces with currentCodes
+	// that potentially need to be cleared
+	// const canvasIndeces = new Set();
+	// const currentIndeces = new Set();
+
 	this.render = function(paint = false) {
 		if (manager.pauseRenders || this.pauseRenders) return;
 		if (!inConstruction && canvasEmpty) return;

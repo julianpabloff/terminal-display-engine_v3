@@ -1,4 +1,5 @@
-const PixelEngine = function(manager, buffer) {
+const PixelEngine = function(manager, buffer) { // Will get rid of manager
+	// TODO: Just make another pixel buffer cuz it needs to know everything
 	const width = buffer.width;
 	const height = buffer.height * 2;
 	const size = width * height;
@@ -92,6 +93,10 @@ const PixelEngine = function(manager, buffer) {
 
 			bufferDraw(char, bufferLocation.x, bufferLocation.y, fg, bg);
 		});
+		console.log(...buffer.getCanavsCodes());
+		console.log(...buffer.getCurrentCodes());
+		renderMap.clear();
+		grid.fill(0);
 	}
 
 	const debugGrid = (x, y) => {
@@ -106,7 +111,7 @@ const PixelEngine = function(manager, buffer) {
 			const x = i % width;
 			const y = Math.floor(i / width);
 			process.stdout.cursorTo(debugX + x * columnWidth, debugY + 1 + y * 2);
-			process.stdout.write('| ' + i.toString() + ' ' + manager.hexDebugString(grid.at(i)));
+			process.stdout.write('| ' + i.toString() + ' ' + manager.hexDebugString(grid.at(i)) + '    ');
 			if (i % width == 0) {
 				process.stdout.cursorTo(debugX, debugY + 2 + y * 2);
 				process.stdout.write(hr);
@@ -120,14 +125,16 @@ const PixelEngine = function(manager, buffer) {
 		debugGrid(0, 6);
 		console.log('\n\n');
 		applyGrid();
-		renderMap.clear();
+		console.log('\n\n');
 		bufferRender();
 	}
 
-	this.paint = function() {
-		buffer.render(true);
-		process.stdout.cursorTo(0, 10);
-		debugGrid();
+	buffer.paint = function() {
+		debugGrid(0, 6);
+		console.log('\n\n');
+		applyGrid();
+		console.log('\n\n');
+		bufferRender(true);
 	}
 }
 

@@ -32,13 +32,18 @@ const BufferTools = function(manager) {
 	for (const name of Object.keys(colorPresets))
 		this.colors[name] = this.hex(colorPresets[name]);
 
+	this.rainbow = [
+		this.hex(0xff0000), this.hex(0xffff00), this.hex(0x00ff00),
+		this.hex(0x00ffff), this.hex(0x0000ff), this.hex(0xff00ff)
+	];
+
 	// Random color
 	const randomHex = () => {
 		const randomPrimary = () => Math.floor(Math.random() * 256);
 		return (randomPrimary() << 16) + (randomPrimary() << 8) + randomPrimary();
 	}
-	this.randomColor = (opacity = 100) => this.hex(randomHex(), opacity);
 	this.colors.random = () => this.hex(randomHex());
+	this.randomColorAtOpacity = (opacity = 100) => this.hex(randomHex(), opacity);
 
 	// Flips hex portion of color while maintaining opacity
 	this.getNegative = color => {

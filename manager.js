@@ -1,4 +1,5 @@
 const DisplayBuffer = require('./buffer.js');
+const PixelDisplayBuffer = require('./pixelBuffer.js');
 const SLL = require('./sll.js');
 
 const BufferManager = function() {
@@ -9,6 +10,14 @@ const BufferManager = function() {
 	this.createBuffer = function(x, y, width, height, zIndex = 0) {
 		const buffer = new DisplayBuffer(x, y, width, height, this, zIndex);
 		buffer.id = createdBuffers.length;
+		buffer.pixel = false;
+		createdBuffers.push(buffer);
+		return buffer;
+	}
+	this.createPixelBuffer = function(x, y, width, height, zIndex = 0) {
+		const buffer = new PixelDisplayBuffer(this, ...arguments);
+		buffer.id = createdBuffers.length;
+		buffer.pixel = true;
 		createdBuffers.push(buffer);
 		return buffer;
 	}
