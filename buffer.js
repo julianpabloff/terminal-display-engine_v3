@@ -52,6 +52,8 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 		const index = coordinateIndex(x, y);
 		if (index != null) cursorIndex = index;
 	}
+	this.centerWidth = width => Math.floor(bufferWidth / 2 - width / 2);
+	this.centerHeight = height => Math.floor(bufferHeight / 2 - height / 2);
 
 	this.wrap = false;
 	this.opacity = 100;
@@ -143,8 +145,13 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 		return this;
 	}
 
-	this.centerWidth = width => Math.floor(bufferWidth / 2 - width / 2);
-	this.centerHeight = height => Math.floor(bufferHeight / 2 - height / 2);
+	this.fill = function(color) {
+		canvasCodes.fill(32);
+		if (this.opacity < 100) color = manager.fadeColor(color, this.opacity);
+		canvasBGs.fill(color);
+		canvasEmpty = false;
+		return this;
+	}
 
 	// Rendering
 	// TODO: What if instead of looping through the entire buffer, you stored the indeces
@@ -172,7 +179,7 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 			currentFGs[i] = fg;
 			currentBGs[i] = bg;
 
-			// Paint functionality
+			// TODO: Fix paint here too (prevent clearing current?)
 			if (paint) {
 				if (!code && currentCode) {
 					i++;
@@ -193,14 +200,6 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 		manager.executeRenderOutput(this.id);
 	}
 	this.paint = () => this.render(true);
-
-	this.fill = function(color) {
-		canvasCodes.fill(32);
-		if (this.opacity < 100) color = manager.fadeColor(color, this.opacity);
-		canvasBGs.fill(color);
-		canvasEmpty = false;
-		return this;
-	}
 
 	// Despite how cool this function is, it's still recommended to move a drawing within a buffer,
 	// instead of moving the entire buffer (for performance), but here you go
@@ -298,12 +297,6 @@ const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
 		} while (i < bufferSize);
 		canvasEmpty = true;
 	}
-
-	this.enablePixels = function() {
-		const PixelEngine = require('./pixels.js');
-		this.pixel = new PixelEngine(manager, this);
-	}
-
 }
 
 module.exports = DisplayBuffer;

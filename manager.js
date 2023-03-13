@@ -169,6 +169,10 @@ const BufferManager = function() {
 		this.fg = fg;
 		this.bg = bg;
 	}
+	const PixelData = function(top, bottom) {
+		this.top = top;
+		this.bottom = bottom;
+	}
 
 	let colorMode = 0; // 0: 24 bit color, 1: 256 color mode, 2: 8 color mode
 	const ansiColorString = [
@@ -233,7 +237,7 @@ const BufferManager = function() {
 	}
 
 	const hexDebugString = color => {
-		if (!color) return '[none]';
+		if (!color) return resetColorString + '[none]' + resetColorString;
 		const hex = getHex(color);
 		const ANSI = fgHexToString(hex);
 		const hexString = hex.toString(16);

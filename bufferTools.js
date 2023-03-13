@@ -11,14 +11,19 @@ const BufferTools = function(manager) {
 	}
 
 	this.hex = (hex, opacity = 100) => hex + (checkOpacity(opacity) << 24);
-	this.rgba = (r, g, b, a = 100) => (checkOpacity(a) << 24) + (r << 16) + (g << 8) + b;
+	this.rgb = (r, g, b, a = 100) => (checkOpacity(a) << 24) + (r << 16) + (g << 8) + b;
+
+	this.hsv = (h, s, v, opacity = 100) => {
+		// r
+	}
 
 	// Common colors - add your own!
 	const colorPresets = {
 		white: 0xffffff,
-		gray: 0x7f7f7f,
+		gray: 0x808080,
 		black: 0,
 		red: 0xff0000,
+		orange: 0xffa500,
 		yellow: 0xffff00,
 		green: 0x00ff00,
 		cyan: 0x00ffff,
