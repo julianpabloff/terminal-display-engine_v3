@@ -1,26 +1,23 @@
 const DisplayBuffer = require('./buffer.js');
 const PixelDisplayBuffer = require('./pixelBuffer.js');
-const SLL = require('./sll.js');
+const ConstructionManager = require('./construction.js');
+// const SLL = require('./sll.js');
 
 const BufferManager = function() {
+	const constructionManager = new ConstructionManager();
 	const clearScreenString = '\x1b[0m\x1b[?25l\x1b[2J\x1b[3J\x1b[1;1H';
 	this.init = () => process.stdout.write(clearScreenString);
 
 	const createdBuffers = [];
-	this.createBuffer = function(x, y, width, height, zIndex = 0) {
-		const buffer = new DisplayBuffer(x, y, width, height, this, zIndex);
+	const createBuffer = function(pixel, bufferArguments) {
+		let buffer;
+		if (pixel) buffer = new PixelDisplayBuffer(this, ...bufferArguments);
+		else buffer = new DisplayBuffer(this, ...bufferArguments);
 		buffer.id = createdBuffers.length;
-		buffer.pixel = false;
-		createdBuffers.push(buffer);
 		return buffer;
-	}
-	this.createPixelBuffer = function(x, y, width, height, zIndex = 0) {
-		const buffer = new PixelDisplayBuffer(this, ...arguments);
-		buffer.id = createdBuffers.length;
-		buffer.pixel = true;
-		createdBuffers.push(buffer);
-		return buffer;
-	}
+	}.bind(this);
+	this.createBuffer = function(x, y, width, height, zIndex = 0) { return createBuffer(false, arguments) };
+	this.createPixelBuffer = function(x, y, width, height, zIndex = 0) { return createBuffer(true, arguments) };
 
 	const setSize = () => {
 		screenWidth = process.stdout.columns;
@@ -33,7 +30,8 @@ const BufferManager = function() {
 		screenConstruction = new Array(screenSize);
 		let i = 0;
 		do {
-			screenConstruction[i] = new SLL();
+			// screenConstruction[i] = new SLL();
+			screenConstruction[i] = constructionManager.create();
 			i++;
 		} while (i < screenSize);
 	}
@@ -173,6 +171,8 @@ const BufferManager = function() {
 		this.top = top;
 		this.bottom = bottom;
 	}
+	this.point = (code, fg, bg) => new PointData(code, fg, bg);
+	this.pixel = (top, bottom) => new PixelData(top, bottom);
 
 	let colorMode = 0; // 0: 24 bit color, 1: 256 color mode, 2: 8 color mode
 	const ansiColorString = [
@@ -245,6 +245,7 @@ const BufferManager = function() {
 	};
 	this.hexDebugString = color => hexDebugString(color);
 
+	/*
 	// Lists all the PointData objects in a construction SLL
 	const debugConstruction = construction => {
 		if (!construction.length) {
@@ -256,7 +257,7 @@ const BufferManager = function() {
 			for (const key of Object.keys(item)) {
 				const logArray = ['   ', key];
 				const value = item[key];
-				if (key == 'fg' || key == 'bg') {
+				if (key != 'code') {
 					logArray.push(hexDebugString(value), getOpacity(value));
 				} else logArray.push(value);
 				console.log(...logArray);
@@ -361,6 +362,7 @@ const BufferManager = function() {
 		else construction.deleteById(id);
 		return false;
 	}
+	*/
 
 	this.requestDraw = function(code, fg, bg, x, y, id, zIndex) {
 		const screenIndex = getScreenIndex(x, y);
@@ -369,6 +371,23 @@ const BufferManager = function() {
 		const construction = screenConstruction.at(screenIndex);
 		const determinedOutput = determineConstructionOutput(construction);
 		requestRender(determinedOutput, x, y);
+		return inConstruction;
+	}
+	const applyToConstructionNew = function(construction, id, zIndex, data) {
+		let add = false;
+		if (data instanceof PointData) add = data.code != 0;
+		else if (data instanceof PixelData) add = data.top || data.bottom;
+		if (add) construction.addSorted(id, zIndex, data);
+		else construction.deleteById(id);
+		return add;
+	}
+	this.requestDrawNew = function(data, x, y, id, zIndex) {
+		const screenIndex = getScreenIndex(x, y);
+		if (screenIndex == null) return false;
+		const construction = screenConstruction.at(screenIndex);
+		const inConstruction = applyToConstructionNew(construction, id, zIndex, data);
+		debugConstruction(construction);
+		const determinedOutput = determineConstructionOutputNew(construction);
 		return inConstruction;
 	}
 

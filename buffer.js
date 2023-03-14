@@ -1,4 +1,4 @@
-const DisplayBuffer = function(x, y, width, height, manager, zIndex) {
+const DisplayBuffer = function(manager, x, y, width, height, zIndex) {
 	this.x = x;
 	this.y = y;
 	this.width = width;
