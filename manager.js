@@ -1,23 +1,28 @@
 const DisplayBuffer = require('./buffer.js');
 const PixelDisplayBuffer = require('./pixelBuffer.js');
-const ConstructionManager = require('./construction.js');
+const Construction = require('./construction.js');
+// const ConstructionManager = require('./construction.js');
 // const SLL = require('./sll.js');
 
 const BufferManager = function() {
-	const constructionManager = new ConstructionManager();
+	// const constructionManager = new ConstructionManager();
 	const clearScreenString = '\x1b[0m\x1b[?25l\x1b[2J\x1b[3J\x1b[1;1H';
 	this.init = () => process.stdout.write(clearScreenString);
 
 	const createdBuffers = [];
-	const createBuffer = function(pixel, bufferArguments) {
+	const createBuffer = function(pixel, x, y, width, height, zIndex) {
 		let buffer;
-		if (pixel) buffer = new PixelDisplayBuffer(this, ...bufferArguments);
-		else buffer = new DisplayBuffer(this, ...bufferArguments);
+		if (pixel) buffer = new PixelDisplayBuffer(this, x, y, width, height, zIndex);
+		else buffer = new DisplayBuffer(this, x, y, width, height, zIndex);
 		buffer.id = createdBuffers.length;
 		return buffer;
 	}.bind(this);
-	this.createBuffer = function(x, y, width, height, zIndex = 0) { return createBuffer(false, arguments) };
-	this.createPixelBuffer = function(x, y, width, height, zIndex = 0) { return createBuffer(true, arguments) };
+	this.createBuffer = (x, y, width, height, zIndex = 0) => {
+		return createBuffer(false, x, y, width, height, zIndex);
+	};
+	this.createPixelBuffer = (x, y, width, height, zIndex = 0) => {
+		return createBuffer(true, x, y, width, height, zIndex);
+	};
 
 	const setSize = () => {
 		screenWidth = process.stdout.columns;
@@ -31,7 +36,8 @@ const BufferManager = function() {
 		let i = 0;
 		do {
 			// screenConstruction[i] = new SLL();
-			screenConstruction[i] = constructionManager.create();
+			// screenConstruction[i] = constructionManager.create();
+			screenConstruction[i] = new Construction();
 			i++;
 		} while (i < screenSize);
 	}
@@ -163,11 +169,13 @@ const BufferManager = function() {
 	let consoleRenderData = { x: null, y: null, fg: 0, bg: 0 };
 
 	const PointData = function(code, fg, bg) {
+		this.type = 'point';
 		this.code = code;
 		this.fg = fg;
 		this.bg = bg;
 	}
 	const PixelData = function(top, bottom) {
+		this.type = 'pixel';
 		this.top = top;
 		this.bottom = bottom;
 	}
@@ -265,6 +273,7 @@ const BufferManager = function() {
 			console.log();
 		});
 	}
+	*/
 
 	const determineConstructionOutput = construction => {
 		let outputCode = 32;
@@ -362,7 +371,6 @@ const BufferManager = function() {
 		else construction.deleteById(id);
 		return false;
 	}
-	*/
 
 	this.requestDraw = function(code, fg, bg, x, y, id, zIndex) {
 		const screenIndex = getScreenIndex(x, y);
@@ -376,18 +384,18 @@ const BufferManager = function() {
 	const applyToConstructionNew = function(construction, id, zIndex, data) {
 		let add = false;
 		if (data instanceof PointData) add = data.code != 0;
-		else if (data instanceof PixelData) add = data.top || data.bottom;
+		else if (data instanceof PixelData) add = data.top != 0 || data.bottom != 0;
 		if (add) construction.addSorted(id, zIndex, data);
 		else construction.deleteById(id);
 		return add;
 	}
-	this.requestDrawNew = function(data, x, y, id, zIndex) {
+	this.requestDrawNew = function(id, data, x, y, zIndex) {
 		const screenIndex = getScreenIndex(x, y);
 		if (screenIndex == null) return false;
 		const construction = screenConstruction.at(screenIndex);
 		const inConstruction = applyToConstructionNew(construction, id, zIndex, data);
-		debugConstruction(construction);
-		const determinedOutput = determineConstructionOutputNew(construction);
+		const determinedOutput = construction.determineOutput();
+		// const determinedOutput = constructionManager.determineOutput(construction);
 		return inConstruction;
 	}
 

@@ -144,7 +144,7 @@ const PixelDisplayBuffer = function(manager, x, y, width, height, zIndex) {
 					const screenX = bufferX + x;
 					const screenY = Math.floor((bufferY + y) / 2);
 					const pixel = manager.pixel(canvasTop, canvasBottom);
-					manager.requestDrawNew(pixel, screenX, screenY, this.id, bufferZ);
+					manager.requestDrawNew(this.id, pixel, screenX, screenY, bufferZ);
 				}
 				/*
 				if (canvasTop != currentTop || canvasBottom != currentBottom) {
