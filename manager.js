@@ -389,12 +389,12 @@ const BufferManager = function() {
 		else construction.deleteById(id);
 		return add;
 	}
-	this.requestDrawNew = function(id, data, x, y, zIndex) {
+	this.requestDrawNew = function(id, data, x, y, zIndex, debug = true) {
 		const screenIndex = getScreenIndex(x, y);
 		if (screenIndex == null) return false;
 		const construction = screenConstruction.at(screenIndex);
 		const inConstruction = applyToConstructionNew(construction, id, zIndex, data);
-		const determinedOutput = construction.determineOutput();
+		if (debug) construction.determineOutput();
 		// const determinedOutput = constructionManager.determineOutput(construction);
 		return inConstruction;
 	}
