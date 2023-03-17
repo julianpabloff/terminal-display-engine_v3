@@ -15,6 +15,7 @@ const BufferManager = function() {
 		if (pixel) buffer = new PixelDisplayBuffer(this, x, y, width, height, zIndex);
 		else buffer = new DisplayBuffer(this, x, y, width, height, zIndex);
 		buffer.id = createdBuffers.length;
+		createdBuffers.push(buffer);
 		return buffer;
 	}.bind(this);
 	this.createBuffer = (x, y, width, height, zIndex = 0) => {

@@ -79,49 +79,73 @@ const Construction = function() {
 
 	const getOpacity = code => code >> 24;
 	const getHex = code => code & 0xffffff;
+
+	const RGBA = function(r, g, b, a) {
+		this.r = r; this.g = g; this.b = b; this.a = a;
+	}
 	const getRGBA = color => {
 		const hex = getHex(color);
-		return {
-			r: hex >> 16,
-			g: (hex >> 8) & 0xFF,
-			b: hex & 0xFF,
-			a: getOpacity(color)
-		};
+		return new RGBA(hex >> 16, (hex >> 8) & 0xff, hex & 0xff, color >> 24);
 	};
 	const setRGBA = rgba =>
 		(Math.round(rgba.a) << 24) +
 		(Math.round(rgba.r) << 16) +
 		(Math.round(rgba.g) << 8) +
 		Math.round(rgba.b);
+	const emptyRGBA = new RGBA(0, 0, 0, 0);
 
 	const layerColorsRGBA = (topRGBA, botRGBA) => {
 		const opacity = topRGBA.a;
+		if (!opacity) return botRGBA;
 		if (opacity > 99) return topRGBA;
 		const calcOpacityDelta = (top, bottom) => (bottom - top) * (100 - opacity) / 100;
-		return {
-			r: topRGBA.r + calcOpacityDelta(topRGBA.r, botRGBA.r),
-			g: topRGBA.g + calcOpacityDelta(topRGBA.g, botRGBA.g),
-			b: topRGBA.b + calcOpacityDelta(topRGBA.b, botRGBA.b),
-			a: 100
-		}
+		return new RGBA(
+			topRGBA.r + calcOpacityDelta(topRGBA.r, botRGBA.r),
+			topRGBA.g + calcOpacityDelta(topRGBA.g, botRGBA.g),
+			topRGBA.b + calcOpacityDelta(topRGBA.b, botRGBA.b),
+			100
+		);
+	}
+	const blurRGBA = (RGBA1, RGBA2) => {
+		return new RGBA(
+			(RGBA1.r + RGBA2.r) / 2,
+			(RGBA1.g + RGBA2.g) / 2,
+			(RGBA1.b + RGBA2.b) / 2,
+			(RGBA1.a + RGBA2.a) / 2,
+		);
 	}
 
+	this.charOnPixelMethod = 'blur';
 	this.determineOutput = function() {
 		debug();
 		let outputCode = 32;
 		let outputFg = 0;
 		let outputBg = 0;
-		let topRGBA, botRGBA;
-		topRGBA = botRGBA = { r: 0, g: 0, b: 0, a: 0};
-		let fgStackIndex = null;
-		const stackHeight = this.length + 1;
+		let fgRGBA, bgRGBA, topRGBA, botRGBA;
+		fgRGBA = bgRGBA = topRGBA = botRGBA = emptyRGBA;
+		const stackHeight = this.length;
 		const topHalfStack = new Uint32Array(stackHeight);
 		const botHalfStack = new Uint32Array(stackHeight);
-		topHalfStack[0] = botHalfStack[0] = 100 << 24;
 
-		let stackIndex = 1;
+		const fgFade = (fg, method) => {
+			switch (method) {
+				case 'blur' : bgRGBA = blurRGBA(topRGBA, botRGBA); break;
+				case 'top' : bgRGBA = topRGBA; break;
+				case 'bottom' : bgRGBA = botRGBA; break;
+				default : bgRGBA = blurRGBA(topRGBA, botRGBA); break;
+			}
+			fgRGBA = layerColorsRGBA(getRGBA(fg), bgRGBA);
+		}
+		const calcBgRGBA = bg => {
+			switch (this.charOnPixelMethod) {
+				case 'blur' : return layerColorsRGBA(getRGBA(bg), blurRGBA(topRGBA, botRGBA));
+				case 'top' : return layerColorsRGBA(getRGBA(bg), topRGBA);
+				case 'bottom' : return layerColorsRGBA(getRGBA(bg), botRGBA);
+			}
+		}
+
+		let stackIndex = 0;
 		this.forEach(data => {
-			let top, bottom;
 			if (data.type == 'point') {
 				const code = data.code;
 				const fg = data.fg;
@@ -130,45 +154,38 @@ const Construction = function() {
 				const bgOpacity = getOpacity(bg);
 
 				if (bgOpacity) {
+					const currentBgRGBA = getRGBA(bg);
 					if (bgOpacity > 99) { // Full opacity
 						outputCode = 32;
 						outputFg = 0;
 						outputBg = bg;
-						fgStackIndex = null;
-					}
-					top = bottom = topHalfStack[stackIndex] = botHalfStack[stackIndex] = bg;
+					} else if (code == 32) // Layer background on top of foreground
+						fgRGBA = layerColorsRGBA(currentBgRGBA, fgRGBA);
+					bgRGBA = calcBgRGBA(bg);
+					topRGBA = layerColorsRGBA(currentBgRGBA, topRGBA);
+					botRGBA = layerColorsRGBA(currentBgRGBA, botRGBA);
+					topHalfStack[stackIndex] = botHalfStack[stackIndex] = bg;
 				}
 				if (code != 32 && fgOpacity) {
-					fgStackIndex = stackIndex;
-					if (fgOpacity < 100)
 					outputCode = code;
+					fgRGBA = layerColorsRGBA(getRGBA(fg), bgRGBA);
 				}
 			} else if (data.type == 'pixel') {
-				top = data.top;
-				bottom = data.bottom;
-				// const top = data.top;
-				// const bottom = data.bottom;
+				const top = data.top;
+				const bottom = data.bottom;
 				const topOpacity = getOpacity(top);
 				const botOpacity = getOpacity(bottom);
 				topHalfStack[stackIndex] = top;
 				botHalfStack[stackIndex] = bottom;
 				if (topOpacity || botOpacity) {
 					outputCode = 32;
-					fgStackIndex = null;
+					fgRGBA = bgRGBA = emptyRGBA;
 				}
-			}
-
-			if (getOpacity(top)) {
 				topRGBA = layerColorsRGBA(getRGBA(top), topRGBA);
-			}
-			if (getOpacity(bottom)) {
 				botRGBA = layerColorsRGBA(getRGBA(bottom), botRGBA);
 			}
-
 			stackIndex++;
 		});
-		console.log(topRGBA);
-		console.log(botRGBA);
 
 		const logStack = stack => {
 			const stackLog = [];
@@ -182,12 +199,19 @@ const Construction = function() {
 			});
 			return stackLog;
 		}
-		console.log('\nfgStackIndex', fgStackIndex);
 		console.log('topStack ', ...logStack(topHalfStack));
 		console.log('botStack ', ...logStack(botHalfStack));
-		console.log('rendering a char', outputCode != 32);
+		console.log('fg  ', hexDebugString(setRGBA(fgRGBA)), fgRGBA);
+		console.log('bg  ', hexDebugString(setRGBA(bgRGBA)), bgRGBA);
+		console.log('top ', hexDebugString(setRGBA(topRGBA)), topRGBA);
+		console.log('bot ', hexDebugString(setRGBA(botRGBA)), botRGBA);
 
-		console.log('\nOUTPUT: code', outputCode, 'fg', hexDebugString(outputFg), 'bg', hexDebugString(outputBg));
+		console.log('\nevaluating as pixel', outputCode == 32);
+		console.log('OUTPUT: code', outputCode, 'fg', hexDebugString(outputFg), 'bg', hexDebugString(outputBg));
+
+		// Process the stacks here
+
+		console.log();
 	}
 
 	// IN THIS SCENARIO...
@@ -214,7 +238,7 @@ const Construction = function() {
 	const resetString = '\x1b[0m';
 
 	const hexDebugString = color => {
-		if (!color) return resetString + '[trans]' + resetString;
+		if (!color) return resetString + '[empty]' + resetString;
 		const hex = getHex(color);
 		const ANSI = fgHexToString(hex);
 		const hexString = hex.toString(16);
