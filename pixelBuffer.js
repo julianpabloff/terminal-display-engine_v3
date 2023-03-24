@@ -121,7 +121,7 @@ const PixelDisplayBuffer = function(manager, x, y, width, height, zIndex) {
 	// TODO: PAINT
 	const topBlockCode = 9600;
 	const bottomBlockCode = 9604;
-	this.render = function(paint = false) {
+	this.render = function(paint = false, debug) {
 		if (manager.pauseRenders || this.pauseRenders) return;
 		let i = 0 - bufferWidth * (bufferY % 2);
 		do { // Loop through buffer
@@ -144,27 +144,8 @@ const PixelDisplayBuffer = function(manager, x, y, width, height, zIndex) {
 					const screenX = bufferX + x;
 					const screenY = Math.floor((bufferY + y) / 2);
 					const pixel = manager.pixel(canvasTop, canvasBottom);
-					manager.requestDrawNew(this.id, pixel, screenX, screenY, bufferZ);
+					manager.requestDrawNew(this.id, pixel, screenX, screenY, bufferZ, canvasTop != 0);
 				}
-				/*
-				if (canvasTop != currentTop || canvasBottom != currentBottom) {
-					let code, fg, bg;
-					if (canvasTop) {
-						code = topBlockCode;
-						fg = canvasTop;
-						bg = canvasBottom;
-					} else {
-						code = bottomBlockCode;
-						fg = canvasBottom;
-						bg = canvasTop;
-					}
-					const x = (index + bufferWidth) % bufferWidth;
-					const y = Math.floor((index + bufferWidth) / bufferWidth) - 1;
-					const screenX = bufferX + x;
-					const screenY = Math.floor((bufferY + y) / 2);
-					enteredConstruction = manager.requestDraw(code, fg, bg, screenX, screenY, this.id, bufferZ);
-				}
-				*/
 				j++;
 			} while (j < bufferWidth);
 			i += bufferWidth * 2;

@@ -107,6 +107,8 @@ const Construction = function() {
 		);
 	}
 	const blurRGBA = (RGBA1, RGBA2) => {
+		if (!RGBA1.a) return RGBA2;
+		if (!RGBA2.a) return RGBA1;
 		return new RGBA(
 			(RGBA1.r + RGBA2.r) / 2,
 			(RGBA1.g + RGBA2.g) / 2,
@@ -116,8 +118,7 @@ const Construction = function() {
 	}
 
 	this.charOnPixelMethod = 'blur';
-	this.determineOutput = function() {
-		debug();
+	this.determineOutput = function(debug) {
 		let outputCode = 32;
 		let outputFg = 0;
 		let outputBg = 0;
@@ -127,15 +128,6 @@ const Construction = function() {
 		const topHalfStack = new Uint32Array(stackHeight);
 		const botHalfStack = new Uint32Array(stackHeight);
 
-		const fgFade = (fg, method) => {
-			switch (method) {
-				case 'blur' : bgRGBA = blurRGBA(topRGBA, botRGBA); break;
-				case 'top' : bgRGBA = topRGBA; break;
-				case 'bottom' : bgRGBA = botRGBA; break;
-				default : bgRGBA = blurRGBA(topRGBA, botRGBA); break;
-			}
-			fgRGBA = layerColorsRGBA(getRGBA(fg), bgRGBA);
-		}
 		const calcBgRGBA = bg => {
 			switch (this.charOnPixelMethod) {
 				case 'blur' : return layerColorsRGBA(getRGBA(bg), blurRGBA(topRGBA, botRGBA));
@@ -153,6 +145,7 @@ const Construction = function() {
 				const fgOpacity = getOpacity(fg);
 				const bgOpacity = getOpacity(bg);
 
+				bgRGBA = calcBgRGBA(bg);
 				if (bgOpacity) {
 					const currentBgRGBA = getRGBA(bg);
 					if (bgOpacity > 99) { // Full opacity
@@ -161,7 +154,6 @@ const Construction = function() {
 						outputBg = bg;
 					} else if (code == 32) // Layer background on top of foreground
 						fgRGBA = layerColorsRGBA(currentBgRGBA, fgRGBA);
-					bgRGBA = calcBgRGBA(bg);
 					topRGBA = layerColorsRGBA(currentBgRGBA, topRGBA);
 					botRGBA = layerColorsRGBA(currentBgRGBA, botRGBA);
 					topHalfStack[stackIndex] = botHalfStack[stackIndex] = bg;
@@ -199,19 +191,49 @@ const Construction = function() {
 			});
 			return stackLog;
 		}
-		console.log('topStack ', ...logStack(topHalfStack));
-		console.log('botStack ', ...logStack(botHalfStack));
-		console.log('fg  ', hexDebugString(setRGBA(fgRGBA)), fgRGBA);
-		console.log('bg  ', hexDebugString(setRGBA(bgRGBA)), bgRGBA);
-		console.log('top ', hexDebugString(setRGBA(topRGBA)), topRGBA);
-		console.log('bot ', hexDebugString(setRGBA(botRGBA)), botRGBA);
-
-		console.log('\nevaluating as pixel', outputCode == 32);
-		console.log('OUTPUT: code', outputCode, 'fg', hexDebugString(outputFg), 'bg', hexDebugString(outputBg));
 
 		// Process the stacks here
-
-		console.log();
+		if (outputCode == 32) {
+			const top = setRGBA(topRGBA);
+			const bottom = setRGBA(botRGBA);
+			const topBlockCode = 9600;
+			const botBlockCode = 9604;
+			if (top != bottom) {
+				if (top) {
+					outputCode = topBlockCode;
+					outputFg = top;
+					outputBg = bottom;
+				} else if (bottom) {
+					outputCode = botBlockCode;
+					outputFg = bottom;
+					outputBg = top;
+				}
+			} else {
+				outputBg = top;
+			}
+		} else {
+			outputFg = setRGBA(fgRGBA);
+			outputBg = setRGBA(bgRGBA);
+		}
+		if (false) {
+			process.stdout.cursorTo(debug.x, debug.y);
+			console.log('\n');
+			debugThis();
+			console.log('topStack ', ...logStack(topHalfStack));
+			console.log('botStack ', ...logStack(botHalfStack));
+			console.log('fg  ', hexDebugString(setRGBA(fgRGBA)), fgRGBA);
+			console.log('bg  ', hexDebugString(setRGBA(bgRGBA)), bgRGBA);
+			console.log('top ', hexDebugString(setRGBA(topRGBA)), topRGBA);
+			console.log('bot ', hexDebugString(setRGBA(botRGBA)), botRGBA);
+			console.log('\nevaluating as pixel', outputCode == 32);
+			console.log('OUTPUT: code', outputCode, 'fg', hexDebugString(outputFg), 'bg', hexDebugString(outputBg));
+			console.log();
+		}
+		return {
+			code: outputCode,
+			fg: outputFg,
+			bg: outputBg
+		}
 	}
 
 	// IN THIS SCENARIO...
@@ -244,7 +266,7 @@ const Construction = function() {
 		const hexString = hex.toString(16);
 		return ANSI + '#' + '0'.repeat(6 - hexString.length) + hexString + resetString;
 	};
-	const debug = function() {
+	const debugThis = function() {
 		if (!this.length) {
 			console.log('this construction is empty');
 			return;

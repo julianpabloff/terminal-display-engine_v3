@@ -254,115 +254,6 @@ const BufferManager = function() {
 	};
 	this.hexDebugString = color => hexDebugString(color);
 
-	/*
-	// Lists all the PointData objects in a construction SLL
-	const debugConstruction = construction => {
-		if (!construction.length) {
-			console.log('this construction is empty');
-			return;
-		}
-		console.log('construction length', construction.length);
-		construction.forEach(item => {
-			for (const key of Object.keys(item)) {
-				const logArray = ['   ', key];
-				const value = item[key];
-				if (key != 'code') {
-					logArray.push(hexDebugString(value), getOpacity(value));
-				} else logArray.push(value);
-				console.log(...logArray);
-			}
-			console.log();
-		});
-	}
-	*/
-
-	const determineConstructionOutput = construction => {
-		let outputCode = 32;
-		let outputFg = 0;
-		let outputBg = 0;
-		let fgStackIndex = null;
-		let bgStack = [];
-		let fgOpacityAConcern = false;
-		let bgOpacityAConcern = false;
-
-		let index = 0;
-		construction.forEach(item => { // item:PointData
-			const code = item.code;
-			const fg = item.fg;
-			const bg = item.bg;
-			if (getOpacity(bg)) {
-				if (getOpacity(bg) == 100) {
-					outputCode = 32;
-					outputFg = 0;
-					bgStack = [bg];
-					index = 0;
-					fgStackIndex = null;
-					fgOpacityAConcern = false;
-					bgOpacityAConcern = false;
-				} else if (!bgOpacityAConcern) {
-					if (!bgStack.length) bgStack.push(100 << 24);
-					bgOpacityAConcern = true;
-				}
-				if (bgOpacityAConcern) {
-					bgStack.push(bg);
-					index++;
-				}
-			}
-			if (code != 32 && getOpacity(fg)) { // only render the code if the fg shows
-				fgStackIndex = index;
-				fgOpacityAConcern = getOpacity(fg) < 100;
-				outputFg = fg;
-				outputCode = code;
-			}
-		});
-
-		const layerColorsRGBA = function(topRGBA, bottomRGBA) {
-			const opacity = topRGBA.a;
-			const calcOpacityDelta = (top, bottom) => (bottom - top) * (100 - opacity) / 100;
-			return {
-				r: topRGBA.r + calcOpacityDelta(topRGBA.r, bottomRGBA.r),
-				g: topRGBA.g + calcOpacityDelta(topRGBA.g, bottomRGBA.g),
-				b: topRGBA.b + calcOpacityDelta(topRGBA.b, bottomRGBA.b),
-				a: 100
-			}
-		}
-		const getRGBA = color => {
-			const hex = getHex(color);
-			return { r: hex >> 16, g: (hex >> 8) & 0xFF, b: hex & 0xFF, a: getOpacity(color) };
-		};
-		const setRGBA = rgba => (Math.round(rgba.a) << 24) + (Math.round(rgba.r) << 16) + (Math.round(rgba.g) << 8) + Math.round(rgba.b);
-
-		if (bgStack.length) {
-			outputBg = bgStack.at(0);
-			let outputFgRGBA = getRGBA(outputFg);
-			let outputBgRGBA = getRGBA(outputBg);
-			if (bgOpacityAConcern) {
-				let coverFgWithBg = false;
-				const insertFgIntoOpacityCalc = function() {
-					outputFgRGBA = layerColorsRGBA(getRGBA(outputFg), outputBgRGBA);
-					coverFgWithBg = true;
-				}
-				if (fgStackIndex == 0) insertFgIntoOpacityCalc();
-				let i = 1;
-				do { // loop through bgStack
-					const currentBgRGBA = getRGBA(bgStack.at(i));
-					outputBgRGBA = layerColorsRGBA(currentBgRGBA, outputBgRGBA);
-					if (coverFgWithBg) outputFgRGBA = layerColorsRGBA(currentBgRGBA, outputFgRGBA);
-					if (i == fgStackIndex) insertFgIntoOpacityCalc();
-					i++;
-				} while (i < bgStack.length);
-				outputFg = setRGBA(outputFgRGBA);
-				outputBg = setRGBA(outputBgRGBA);
-			} else if (outputFg) {
-				outputFgRGBA = layerColorsRGBA(outputFgRGBA, outputBgRGBA);
-				outputFg = setRGBA(outputFgRGBA);
-			}
-		} else if (fgOpacityAConcern) // When there's just a foreground on nothing
-			outputFg = setRGBA(layerColorsRGBA(getRGBA(outputFg), getRGBA(100 << 24)));
-
-		return new PointData(outputCode, outputFg, outputBg);
-	}
-
 	const applyToConstruction = function(code, fg, bg, screenIndex, id, zIndex) {
 		const construction = screenConstruction.at(screenIndex);
 		if (code) {
@@ -390,13 +281,14 @@ const BufferManager = function() {
 		else construction.deleteById(id);
 		return add;
 	}
-	this.requestDrawNew = function(id, data, x, y, zIndex, debug = true) {
+	this.requestDrawNew = function(id, data, x, y, zIndex, debug) {
 		const screenIndex = getScreenIndex(x, y);
 		if (screenIndex == null) return false;
 		const construction = screenConstruction.at(screenIndex);
 		const inConstruction = applyToConstructionNew(construction, id, zIndex, data);
-		if (debug) construction.determineOutput();
-		// const determinedOutput = constructionManager.determineOutput(construction);
+		// console.log('requesting draw at x', x, 'y', y);
+		const determinedOutput = construction.determineOutput(debug);
+		requestRender(determinedOutput, x, y);
 		return inConstruction;
 	}
 

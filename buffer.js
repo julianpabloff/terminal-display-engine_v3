@@ -160,7 +160,7 @@ const DisplayBuffer = function(manager, x, y, width, height, zIndex) {
 	// const canvasIndeces = new Set();
 	// const currentIndeces = new Set();
 
-	this.render = function(paint = false) {
+	this.render = function(paint = false, debug = false) {
 		if (manager.pauseRenders || this.pauseRenders) return;
 		if (!inConstruction && canvasEmpty) return;
 		inConstruction = false;
@@ -191,7 +191,9 @@ const DisplayBuffer = function(manager, x, y, width, height, zIndex) {
 			if (code != currentCode || fg != currentFg || bg != currentBg) {
 				const screenX = bufferX + (i % bufferWidth);
 				const screenY = bufferY + Math.floor(i / bufferWidth);
-				enteredConstruction = manager.requestDraw(code, fg, bg, screenX, screenY, this.id, bufferZ);
+				// enteredConstruction = manager.requestDraw(code, fg, bg, screenX, screenY, this.id, bufferZ);
+				const point = manager.point(code, fg, bg);
+				enteredConstruction = manager.requestDrawNew(this.id, point, screenX, screenY, bufferZ, debug);
 			}
 			if (enteredConstruction && !inConstruction) inConstruction = true;
 			i++;
