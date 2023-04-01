@@ -39,7 +39,7 @@ const Construction = function() {
 			}
 			runner = runner.next;
 		}
-			runner.next = newNode;
+		runner.next = newNode;
 		addedIDs.add(id);
 		this.length++;
 	}
@@ -52,6 +52,7 @@ const Construction = function() {
 				addedIDs.delete(id);
 				return;
 			}
+			runner = runner.next;
 		}
 	}
 	this.findById = function(id) {

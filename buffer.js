@@ -51,6 +51,7 @@ const DisplayBuffer = function(manager, x, y, width, height, zIndex) {
 	this.cursorTo = (x, y) => {
 		const index = coordinateIndex(x, y);
 		if (index != null) cursorIndex = index;
+		return this;
 	}
 	this.centerWidth = width => Math.floor(bufferWidth / 2 - width / 2);
 	this.centerHeight = height => Math.floor(bufferHeight / 2 - height / 2);
@@ -160,7 +161,7 @@ const DisplayBuffer = function(manager, x, y, width, height, zIndex) {
 	// const canvasIndeces = new Set();
 	// const currentIndeces = new Set();
 
-	this.render = function(paint = false, debug = false) {
+	this.render = function(paint = false) {
 		if (manager.pauseRenders || this.pauseRenders) return;
 		if (!inConstruction && canvasEmpty) return;
 		inConstruction = false;
@@ -191,15 +192,14 @@ const DisplayBuffer = function(manager, x, y, width, height, zIndex) {
 			if (code != currentCode || fg != currentFg || bg != currentBg) {
 				const screenX = bufferX + (i % bufferWidth);
 				const screenY = bufferY + Math.floor(i / bufferWidth);
-				// enteredConstruction = manager.requestDraw(code, fg, bg, screenX, screenY, this.id, bufferZ);
 				const point = manager.point(code, fg, bg);
-				enteredConstruction = manager.requestDrawNew(this.id, point, screenX, screenY, bufferZ, debug);
+				enteredConstruction = manager.requestDrawNew(this.id, point, screenX, screenY, bufferZ);
 			}
 			if (enteredConstruction && !inConstruction) inConstruction = true;
 			i++;
 		} while (i < bufferSize);
 		canvasEmpty = true;
-		manager.executeRenderOutput(this.id);
+		manager.executeRenderOutput();
 	}
 	this.paint = () => this.render(true);
 

@@ -37,11 +37,6 @@ const BufferTools = function(manager) {
 	for (const name of Object.keys(colorPresets))
 		this.colors[name] = this.hex(colorPresets[name]);
 
-	this.rainbow = [
-		this.hex(0xff0000), this.hex(0xffff00), this.hex(0x00ff00),
-		this.hex(0x00ffff), this.hex(0x0000ff), this.hex(0xff00ff)
-	];
-
 	// Random color
 	const randomHex = () => {
 		const randomPrimary = () => Math.floor(Math.random() * 256);
@@ -57,17 +52,22 @@ const BufferTools = function(manager) {
 	}
 
 	// Output: #ff0000 80%
+	const fgHexToString = hex => '\x1b[38;2;' + (hex >> 16).toString() + ';' + ((hex >> 8) & 0xFF).toString() + ';' + (hex & 0xFF).toString() + 'm';
+	const bgHexToString = hex => '\x1b[48;2;' + (hex >> 16).toString() + ';' + ((hex >> 8) & 0xFF).toString() + ';' + (hex & 0xFF).toString() + 'm';
+	const resetString = '\x1b[0m';
 	this.hexDebugString = color => {
-		if (!color) return '[none]';
+		if (!color) return '[empty]';
 		const hex = color & 0xffffff;
+		const ANSI = fgHexToString(hex);
 		const hexString = hex.toString(16);
 		const opacity = (color >> 24).toString();
-		return `#${'0'.repeat(6 - hexString.length)}${hexString} ${opacity}%`;
+		// return `#${'0'.repeat(6 - hexString.length)}${hexString} ${opacity}%`;
+		return ANSI + '#' + '0'.repeat(6 - hexString.length) + hexString + resetString;
 	};
 
 	// Generates an array of [count] length of color codes linearly interpolated from [color1] to [color2]
 	// [inclusive = false] is for chaining linear gradients, preventing the stop of a grad and start of the next from being duplicated
-	this.linearGradient = function(color1, color2, count, inclusive = true) {
+	const linearGradient = function(color1, color2, count, inclusive) {
 		const hex1 = color1 & 0xffffff;
 		let r = hex1 >> 16;
 		let g = (hex1 >> 8) & 0xff;
@@ -96,7 +96,7 @@ const BufferTools = function(manager) {
 
 	// colorArray = [ red, yellow, green, cyan, blue, magenta ]
 	// {inclusive} pastes an extra color at the end, the last color - doesn't affect the color change rate
-	this.linearGradientMulti = function(colorArray, segmentLength, inclusive = true) {
+	const linearGradientMulti = function(colorArray, segmentLength, inclusive) {
 		const colorCount = colorArray.length;
 		const outputLength = segmentLength * (colorCount - 1) + inclusive;
 		const output = new Uint32Array(outputLength);
@@ -106,7 +106,7 @@ const BufferTools = function(manager) {
 			const color1 = colorArray.at(i);
 			const color2 = colorArray.at(i + 1);
 
-			const grad = this.linearGradient(color1, color2, segmentLength, false);
+			const grad = linearGradient(color1, color2, segmentLength, false);
 			for (const color of grad) {
 				output[j] = color;
 				j++;
@@ -119,7 +119,62 @@ const BufferTools = function(manager) {
 		return output;
 	}
 
+	const RGBA = function(r, g, b, a) {
+		this.r = r; this.g = g; this.b = b; this.a = a;
+	}
+	const getRGBA = color => {
+		const hex = getHex(color);
+		return new RGBA(hex >> 16, (hex >> 8) & 0xff, hex & 0xff, color >> 24);
+	};
+	const setRGBA = rgba =>
+		(Math.round(rgba.a) << 24) +
+		(Math.round(rgba.r) << 16) +
+		(Math.round(rgba.g) << 8) +
+		Math.round(rgba.b);
+	const emptyRGBA = new RGBA(0, 0, 0, 0);
+
+	// If you want to go off of segmentLength
+	// If inclusive, count = (colorArray.length - 1) * segmentLength
+	// Else count = something that colorArray.length can evenly expand into (3 into 7)
+	this.linearGradient = function(colorArray, count, inclusive = true) {
+		const output = new Uint32Array(count);
+		const lerp = (start, end, t) => (1 - t) * start + t * end;
+		const lastIndex = colorArray.length - 1;
+		let u = 0;
+		let i = 0;
+		do {
+			u = lerp(0, lastIndex, i / (count - inclusive));
+			const index = Math.floor(u);
+			const t = u - index;
+
+			const color1 = colorArray.at(index);
+			const RGBA1 = getRGBA(color1);
+			const color2 = colorArray.at(index + 1);
+			const RGBA2 = color2 ? getRGBA(color2) : emptyRGBA;
+
+			const outputRGBA = new RGBA(
+				lerp(RGBA1.r, RGBA2.r, t),
+				lerp(RGBA1.g, RGBA2.g, t),
+				lerp(RGBA1.b, RGBA2.b, t),
+				lerp(RGBA1.a, RGBA2.a, t)
+			);
+			output[i] = setRGBA(outputRGBA);
+			// console.log(i, u, index, this.hexDebugString(output.at(i)));
+			i++;
+		} while (i < count);
+		return output;
+	}
+
+	this.rainbow = function(length) {
+		const rainbowHex = [0xff0000, 0xffff00, 0x00ff00, 0x00ffff, 0x0000ff, 0xff00ff, 0xff0000];
+		const rainbow = rainbowHex.map(hex => this.hex(hex));
+		return this.linearGradient(rainbow, length, false);
+	}
+
 	// POSITIONING TOOLS
+	// TODO: centerHeight doesn't work when it's a pixel buffer, you have to do
+	// centerHeight(height / 2) * 2 for it to actually be centered
+	// Maybe these should actaully be buffer functions themselves
 	this.centerWidth = width => Math.floor(manager.screenWidth() / 2 - width / 2);
 	this.centerHeight = height => Math.floor(manager.screenHeight() / 2 - height / 2);
 
@@ -134,6 +189,30 @@ const BufferTools = function(manager) {
 		buffer.draw(sq.bl + sq.h.repeat(buffer.width - 2) + sq.br, 0, buffer.bottom, color);
 		return buffer;
 	}
+
+	// 0xff0000 0xffff00 0x00ff00 20
+	// 0 1    2  3    4   5     6   7     8   9     10
+	// 0 25.5 51 76.5 102 127.5 153 178.5 204 229.5 255
+	// 00: 255    0
+	// 01: 255    25.5
+	// 02: 255    51
+	// 03: 255    76.5
+	// 04: 255    102
+	// 05: 255    127.5
+	// 06: 255    153
+	// 07: 255    178.5
+	// 08: 255    204
+	// 09: 255    229.5
+	// 10: 229.5  255
+	// 11: 204
+	// 12: 178.5
+	// 13: 153
+	// 14: 127.5
+	// 15: 102
+	// 16: 76.5
+	// 17: 51
+	// 18: 25.5
+	// 19: 0
 }
 
 module.exports = BufferTools;

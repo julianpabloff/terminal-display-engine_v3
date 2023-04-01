@@ -37,6 +37,7 @@ const PixelDisplayBuffer = function(manager, x, y, width, height, zIndex) {
 	this.cursorTo = (x, y) => {
 		const index = coordinateIndex(x, y);
 		if (index != null) cursorIndex = index;
+		return this;
 	}
 	this.centerWidth = width => Math.floor(bufferWidth / 2 - width / 2);
 	this.centerHeight = height => Math.floor(bufferHeight / 2 - height / 2);
@@ -105,23 +106,14 @@ const PixelDisplayBuffer = function(manager, x, y, width, height, zIndex) {
 	// this.drawAbsolute(colorArray, screenGridX, screenGridY);
 
 	this.fill = function(color) {
-		// canvas.fill(color);
-		let i = 0;
-		do {
-			addToCanvas(i, color);
-			// canvasIndeces.add(i);
-			i++;
-		} while (i < bufferSize);
+		canvas.fill(color);
+		cursorIndex = 0;
 		return this;
 	}
 
-	// TODO: Move ASCII block determination logic up to the manager level, to more accurately determine whether to draw a top block
-	// or a bottom block, given the bigger picture of the construction. Make a separate mangager.requestPixelDraw() and send a
-	// pixel data object with .top and .bottom (cuz BigInt is confusing)
-	// TODO: PAINT
 	const topBlockCode = 9600;
 	const bottomBlockCode = 9604;
-	this.render = function(paint = false, debug) {
+	this.render = function(paint = false) {
 		if (manager.pauseRenders || this.pauseRenders) return;
 		let i = 0 - bufferWidth * (bufferY % 2);
 		do { // Loop through buffer
@@ -144,7 +136,7 @@ const PixelDisplayBuffer = function(manager, x, y, width, height, zIndex) {
 					const screenX = bufferX + x;
 					const screenY = Math.floor((bufferY + y) / 2);
 					const pixel = manager.pixel(canvasTop, canvasBottom);
-					manager.requestDrawNew(this.id, pixel, screenX, screenY, bufferZ, canvasTop != 0);
+					manager.requestDrawNew(this.id, pixel, screenX, screenY, bufferZ);
 				}
 				j++;
 			} while (j < bufferWidth);

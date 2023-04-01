@@ -264,15 +264,6 @@ const BufferManager = function() {
 		return false;
 	}
 
-	this.requestDraw = function(code, fg, bg, x, y, id, zIndex) {
-		const screenIndex = getScreenIndex(x, y);
-		if (screenIndex == null) return false;
-		const inConstruction = applyToConstruction(code, fg, bg, screenIndex, id, zIndex);
-		const construction = screenConstruction.at(screenIndex);
-		const determinedOutput = determineConstructionOutput(construction);
-		requestRender(determinedOutput, x, y);
-		return inConstruction;
-	}
 	const applyToConstructionNew = function(construction, id, zIndex, data) {
 		let add = false;
 		if (data instanceof PointData) add = data.code != 0;
@@ -281,17 +272,18 @@ const BufferManager = function() {
 		else construction.deleteById(id);
 		return add;
 	}
-	this.requestDrawNew = function(id, data, x, y, zIndex, debug) {
+	this.requestDrawNew = function(id, data, x, y, zIndex) {
 		const screenIndex = getScreenIndex(x, y);
 		if (screenIndex == null) return false;
 		const construction = screenConstruction.at(screenIndex);
 		const inConstruction = applyToConstructionNew(construction, id, zIndex, data);
-		// console.log('requesting draw at x', x, 'y', y);
-		const determinedOutput = construction.determineOutput(debug);
+		const determinedOutput = construction.determineOutput();
 		requestRender(determinedOutput, x, y);
 		return inConstruction;
+		return false;
 	}
 
+	// TODO: Account for pixels
 	const ghostRenderIndeces = new Set();
 	this.requestGhostDraw = function(code, fg, bg, x, y, id, zIndex) {
 		const screenIndex = getScreenIndex(x, y);
