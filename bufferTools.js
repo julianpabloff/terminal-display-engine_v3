@@ -1,7 +1,5 @@
 const BufferTools = function(manager) {
 	// COLOR TOOLS
-	// 0000 0000 0000 0000 0000 0000 0000 0000
-	// [opacity] [       24 bit color        ]
 	const getOpacity = code => code >> 24;
 	const getHex = code => code & 0xffffff;
 	const checkOpacity = opacity => {
@@ -14,7 +12,6 @@ const BufferTools = function(manager) {
 	this.rgb = (r, g, b, a = 100) => (checkOpacity(a) << 24) + (r << 16) + (g << 8) + b;
 
 	this.hsv = (h, s, v, opacity = 100) => {
-		// r
 	}
 
 	// Common colors - add your own!
@@ -65,60 +62,6 @@ const BufferTools = function(manager) {
 		return ANSI + '#' + '0'.repeat(6 - hexString.length) + hexString + resetString;
 	};
 
-	// Generates an array of [count] length of color codes linearly interpolated from [color1] to [color2]
-	// [inclusive = false] is for chaining linear gradients, preventing the stop of a grad and start of the next from being duplicated
-	const linearGradient = function(color1, color2, count, inclusive) {
-		const hex1 = color1 & 0xffffff;
-		let r = hex1 >> 16;
-		let g = (hex1 >> 8) & 0xff;
-		let b = hex1 & 0xff;
-		let a = color1 >> 24;
-		const output = new Uint32Array(count);
-
-		if (!inclusive) count++;
-		const hex2 = color2 & 0xffffff;
-		const intervalR = ((hex2 >> 16) - r) / count;
-		const intervalG = (((hex2 >> 8) & 0xff) - g) / count;
-		const intervalB = ((hex2 & 0xff) - b) / count;
-		const intervalA = ((color2 >> 24) - a) / count;
-
-		output[0] = color1;
-		let i = 1;
-		do { // transform r, g, b, a
-			r += intervalR; g += intervalG; b += intervalB; a += intervalA;
-			const outputHex = (Math.round(r) << 16) + (Math.round(g) << 8) + Math.round(b);
-			output[i] = outputHex + (a << 24);
-			i++;
-		} while (i < count - 1);
-		if (inclusive) output[count - 1] = color2;
-		return output;
-	}
-
-	// colorArray = [ red, yellow, green, cyan, blue, magenta ]
-	// {inclusive} pastes an extra color at the end, the last color - doesn't affect the color change rate
-	const linearGradientMulti = function(colorArray, segmentLength, inclusive) {
-		const colorCount = colorArray.length;
-		const outputLength = segmentLength * (colorCount - 1) + inclusive;
-		const output = new Uint32Array(outputLength);
-
-		let i = 0; let j = 0;
-		do { // chain gradients
-			const color1 = colorArray.at(i);
-			const color2 = colorArray.at(i + 1);
-
-			const grad = linearGradient(color1, color2, segmentLength, false);
-			for (const color of grad) {
-				output[j] = color;
-				j++;
-			}
-			i++;
-		} while (i < colorCount - 1);
-
-		if (inclusive) output[outputLength - 1] = colorArray.at(-1);
-
-		return output;
-	}
-
 	const RGBA = function(r, g, b, a) {
 		this.r = r; this.g = g; this.b = b; this.a = a;
 	}
@@ -133,9 +76,6 @@ const BufferTools = function(manager) {
 		Math.round(rgba.b);
 	const emptyRGBA = new RGBA(0, 0, 0, 0);
 
-	// If you want to go off of segmentLength
-	// If inclusive, count = (colorArray.length - 1) * segmentLength
-	// Else count = something that colorArray.length can evenly expand into (3 into 7)
 	this.linearGradient = function(colorArray, count, inclusive = true) {
 		const output = new Uint32Array(count);
 		const lerp = (start, end, t) => (1 - t) * start + t * end;
@@ -189,30 +129,6 @@ const BufferTools = function(manager) {
 		buffer.draw(sq.bl + sq.h.repeat(buffer.width - 2) + sq.br, 0, buffer.bottom, color);
 		return buffer;
 	}
-
-	// 0xff0000 0xffff00 0x00ff00 20
-	// 0 1    2  3    4   5     6   7     8   9     10
-	// 0 25.5 51 76.5 102 127.5 153 178.5 204 229.5 255
-	// 00: 255    0
-	// 01: 255    25.5
-	// 02: 255    51
-	// 03: 255    76.5
-	// 04: 255    102
-	// 05: 255    127.5
-	// 06: 255    153
-	// 07: 255    178.5
-	// 08: 255    204
-	// 09: 255    229.5
-	// 10: 229.5  255
-	// 11: 204
-	// 12: 178.5
-	// 13: 153
-	// 14: 127.5
-	// 15: 102
-	// 16: 76.5
-	// 17: 51
-	// 18: 25.5
-	// 19: 0
 }
 
 module.exports = BufferTools;

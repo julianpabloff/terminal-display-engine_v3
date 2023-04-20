@@ -1,10 +1,9 @@
 const DisplayBuffer = require('./buffer.js');
 const PixelDisplayBuffer = require('./pixelBuffer.js');
 const Construction = require('./construction.js');
-// const ConstructionManager = require('./construction.js');
-// const SLL = require('./sll.js');
+const BufferTools = require('./bufferTools.js');
 
-const BufferManager = function() {
+	const BufferManager = function() {
 	// const constructionManager = new ConstructionManager();
 	const clearScreenString = '\x1b[0m\x1b[?25l\x1b[2J\x1b[3J\x1b[1;1H';
 	this.init = () => process.stdout.write(clearScreenString);
@@ -36,8 +35,6 @@ const BufferManager = function() {
 		screenConstruction = new Array(screenSize);
 		let i = 0;
 		do {
-			// screenConstruction[i] = new SLL();
-			// screenConstruction[i] = constructionManager.create();
 			screenConstruction[i] = new Construction();
 			i++;
 		} while (i < screenSize);
@@ -48,6 +45,8 @@ const BufferManager = function() {
 
 	this.screenWidth = () => screenWidth;
 	this.screenHeight = () => screenHeight;
+	this.centerWidth = width => Math.floor(screenWidth / 2 - width / 2);
+	this.centerHeight = height => Math.floor(screenHeight / 2 - height / 2);
 
 	const getScreenIndex = (x, y) => {
 		if (x < 0 || x > screenWidth - 1) return null;
@@ -61,8 +60,11 @@ const BufferManager = function() {
 	const getOpacity = code => code >> 24;
 	const getHex = code => code & 0xffffff;
 
-	this.fg = (100 << 24) + (255 << 16) + (255 << 8) + 255; // White default
-	this.bg = 0;
+	this.resetColor = () => {
+		this.fg = (100 << 24) + (255 << 16) + (255 << 8) + 255; // White default
+		this.bg = 0;
+	}
+	this.resetColor();
 
 	this.setFg = colorCode => this.fg = colorCode;
 	this.setBg = colorCode => this.bg = colorCode;
@@ -191,9 +193,7 @@ const BufferManager = function() {
 	];
 
 	const addToCurrentRender = function(pointData, x, y) {
-		const code = pointData.code;
-		const fg = pointData.fg;
-		const bg = pointData.bg;
+		const { code, fg, bg } = pointData;
 
 		const fgChanged = fg != consoleRenderData.fg;
 		const bgChanged = bg != consoleRenderData.bg;
@@ -214,9 +214,7 @@ const BufferManager = function() {
 	}
 
 	const requestRender = function(pointData, x, y) {
-		const code = pointData.code;
-		const fg = pointData.fg;
-		const bg = pointData.bg;
+		const { code, fg, bg } = pointData;
 		const screenIndex = getScreenIndex(x, y);
 
 		if (
@@ -292,6 +290,14 @@ const BufferManager = function() {
 		ghostRenderIndeces.add(screenIndex);
 		return inConstruction;
 	}
+	this.requestGhostDrawNew = function(id, data, x, y, zIndex) {
+		const screenIndex = getScreenIndex(x, y);
+		if (screenIndex == null) return false;
+		const construction = screenConstruction.at(screenIndex);
+		const inConstruction = applyToConstructionNew(construction, id, zIndex, data);
+		ghostRenderIndeces.add(screenIndex);
+		return inConstruction;
+	}
 
 	this.executeRenderOutput = function() {
 		// console.log(currentRender);
@@ -302,7 +308,7 @@ const BufferManager = function() {
 	this.executeGhostRender = function() {
 		ghostRenderIndeces.forEach(screenIndex => {
 			const construction = screenConstruction.at(screenIndex);
-			const determinedOutput = determineConstructionOutput(construction);
+			const determinedOutput = construction.determineOutput();
 			const x = screenIndex % screenWidth;
 			const y = Math.floor(screenIndex / screenWidth);
 			requestRender(determinedOutput, x, y);
@@ -313,7 +319,8 @@ const BufferManager = function() {
 
 	this.massRender = function() {
 		if (this.pauseRenders) return;
-		for (const buffer of createdBuffers) buffer.ghostRender();
+		for (const buffer of createdBuffers)
+			if (!buffer.persistent) buffer.ghostRender();
 		this.executeGhostRender();
 	}
 

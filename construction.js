@@ -140,9 +140,7 @@ const Construction = function() {
 		let stackIndex = 0;
 		this.forEach(data => {
 			if (data.type == 'point') {
-				const code = data.code;
-				const fg = data.fg;
-				const bg = data.bg;
+				const { code, fg, bg } = data;
 				const fgOpacity = getOpacity(fg);
 				const bgOpacity = getOpacity(bg);
 
@@ -164,8 +162,7 @@ const Construction = function() {
 					fgRGBA = layerColorsRGBA(getRGBA(fg), bgRGBA);
 				}
 			} else if (data.type == 'pixel') {
-				const top = data.top;
-				const bottom = data.bottom;
+				const { top, bottom } = data;
 				const topOpacity = getOpacity(top);
 				const botOpacity = getOpacity(bottom);
 				topHalfStack[stackIndex] = top;

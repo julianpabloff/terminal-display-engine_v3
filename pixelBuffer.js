@@ -63,6 +63,7 @@ const PixelDisplayBuffer = function(manager, x, y, width, height, zIndex) {
 		const available = bufferWidth - cursorIndex % bufferWidth;
 		do {
 			canvas[cursorIndex] = getColor();
+			if (canvasEmpty) canvasEmpty = false;
 			cursorIndex++;
 			if (!this.wrap && cursorIndex - startIndex >= available || cursorIndex >= bufferSize) break;
 			i++;
@@ -93,11 +94,32 @@ const PixelDisplayBuffer = function(manager, x, y, width, height, zIndex) {
 			else index = coordinateIndex(x + i, y);
 			if (index != null) {
 				canvas[index] = getColor();
+				if (canvasEmpty) canvasEmpty = false;
 				cursorIndex = index + 1;
 			}
 			i++;
 		} while (i < amount);
 		return this;
+	}
+
+	this.drawGrid = function(grid, legend, x = 0, y = 0) {
+		let i = 0;
+		const gridHeight = grid.length;
+		do {
+			let j = 0;
+			const row = grid[i];
+			const rowWidth = row.length;
+			do {
+				const index = coordinateIndex(x + j, y + i);
+				if (index != null) {
+					const color = legend[row[j]];
+					if (color >> 24) canvas[index] = color;
+					if (canvasEmpty) canvasEmpty = false;
+				}
+				j++;
+			} while (j < rowWidth);
+			i++;
+		} while (i < gridHeight);
 	}
 	
 	// TODO
@@ -119,23 +141,22 @@ const PixelDisplayBuffer = function(manager, x, y, width, height, zIndex) {
 		do { // Loop through buffer
 			let j = 0;
 			do {
-				const log = [i + j];
-				const index = i + j;
-				let canvasTop = canvas[index] | 0;
-				let canvasBottom = canvas[index + bufferWidth] | 0;
-				const currentTop = current[index] | 0;
-				const currentBottom = current[index + bufferWidth] | 0;
-				canvas[index] = 0;
-				canvas[index + bufferWidth] = 0;
-				current[index] = canvasTop;
-				current[index + bufferWidth] = canvasBottom;
+				const topIndex = i + j;
+				const botIndex = topIndex + bufferWidth;
+				const top = canvas[topIndex] | 0;
+				const bottom = canvas[botIndex] | 0;
+				const currentTop = current[topIndex] | 0;
+				const currentBottom = current[botIndex] | 0;
+				canvas[topIndex] = canvas[botIndex] = 0;
+				current[topIndex] = top;
+				current[botIndex] = bottom;
 
-				if (canvasTop != currentTop || canvasBottom != currentBottom) {
-					const x = (index + bufferWidth) % bufferWidth;
-					const y = Math.floor((index + bufferWidth) / bufferWidth) - 1;
+				if (top != currentTop || bottom != currentBottom) {
+					const x = botIndex % bufferWidth;
+					const y = Math.floor(botIndex / bufferWidth) - 1;
 					const screenX = bufferX + x;
 					const screenY = Math.floor((bufferY + y) / 2);
-					const pixel = manager.pixel(canvasTop, canvasBottom);
+					const pixel = manager.pixel(top, bottom);
 					manager.requestDrawNew(this.id, pixel, screenX, screenY, bufferZ);
 				}
 				j++;
@@ -145,6 +166,41 @@ const PixelDisplayBuffer = function(manager, x, y, width, height, zIndex) {
 		manager.executeRenderOutput();
 	}
 	this.paint = () => this.render(true);
+
+	this.ghostRender = function() {
+		if (!inConstruction && canvasEmpty) return;
+		inConstruction = false;
+		let i = 0;
+		do { // Loop through buffer
+			let j = 0;
+			do {
+				const topIndex = i + j;
+				const botIndex = topIndex + bufferWidth;
+				const top = canvas[topIndex] | 0;
+				const bottom = canvas[botIndex] | 0;
+				const currentTop = current[topIndex] | 0;
+				const currentBottom = current[botIndex] | 0;
+				canvas[topIndex] = canvas[botIndex] = 0;
+				current[topIndex] = top;
+				current[botIndex] = bottom;
+
+				let enteredConstruction = false;
+				if (top != currentTop || bottom != currentBottom) {
+					const x = botIndex % bufferWidth;
+					const y = Math.floor(botIndex / bufferWidth) - 1;
+					const screenX = bufferX + x;
+					const screenY = Math.floor((bufferY + y) / 2);
+					const pixel = manager.pixel(top, bottom);
+					enteredConstruction =
+						manager.requestGhostDrawNew(this.id, pixel, screenX, screenY, bufferZ);
+				}
+				if (enteredConstruction && !inConstruction) inConstruction = true;
+				j++;
+
+			} while (j < bufferWidth);
+			i += bufferWidth * 2;
+		} while (i < bufferSize);
+	}
 
 	this.debugCanvas = (debugX, debugY) => {
 		const columnWidth = 15;

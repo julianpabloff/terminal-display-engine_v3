@@ -170,12 +170,12 @@ const DisplayBuffer = function(manager, x, y, width, height, zIndex) {
 			const code = canvasCodes.at(i);
 			const fg = canvasFGs.at(i);
 			let bg = canvasBGs.at(i);
-			canvasCodes[i] = 0;
-			canvasFGs[i] = 0;
-			canvasBGs[i] = 0;
 			const currentCode = currentCodes.at(i);
 			const currentFg = currentFGs.at(i);
 			const currentBg = currentBGs.at(i);
+			canvasCodes[i] = 0;
+			canvasFGs[i] = 0;
+			canvasBGs[i] = 0;
 			currentCodes[i] = code;
 			currentFGs[i] = fg;
 			currentBGs[i] = bg;
@@ -188,6 +188,7 @@ const DisplayBuffer = function(manager, x, y, width, height, zIndex) {
 				} else if (code && !bg) bg = currentBg;
 			}
 
+			// TODO: Separate out a request draw and request erase at this point, not at manager
 			let enteredConstruction = false;
 			if (code != currentCode || fg != currentFg || bg != currentBg) {
 				const screenX = bufferX + (i % bufferWidth);
@@ -202,6 +203,40 @@ const DisplayBuffer = function(manager, x, y, width, height, zIndex) {
 		manager.executeRenderOutput();
 	}
 	this.paint = () => this.render(true);
+
+	// Changes only the screen construction, called by manager only
+	this.ghostRender = function() {
+		// if (inConstruction && this.persistent) return; // only avoid erasing the buffer, not drawing the buffer (from its canvas)
+		if (!inConstruction && canvasEmpty) return;
+		inConstruction = false;
+		let i = 0;
+		do { // Loop through buffer
+			const code = canvasCodes.at(i);
+			const fg = canvasFGs.at(i);
+			const bg = canvasBGs.at(i);
+			const currentCode = currentCodes.at(i);
+			const currentFg = currentFGs.at(i);
+			const currentBg = currentBGs.at(i);
+			canvasCodes[i] = 0;
+			canvasFGs[i] = 0;
+			canvasBGs[i] = 0;
+			currentCodes[i] = code;
+			currentFGs[i] = fg;
+			currentBGs[i] = bg;
+
+			let enteredConstruction = false;
+			if (code != currentCode || fg != currentFg || bg != currentBg) {
+				const screenX = bufferX + (i % bufferWidth);
+				const screenY = bufferY + Math.floor(i / bufferWidth);
+				const point = manager.point(code, fg, bg);
+				enteredConstruction =
+					manager.requestGhostDrawNew(this.id, point, screenX, screenY, bufferZ);
+			}
+			if (enteredConstruction && !inConstruction) inConstruction = true;
+			i++;
+		} while (i < bufferSize);
+		canvasEmpty = true;
+	}
 
 	// Despite how cool this function is, it's still recommended to move a drawing within a buffer,
 	// instead of moving the entire buffer (for performance), but here you go
@@ -228,25 +263,29 @@ const DisplayBuffer = function(manager, x, y, width, height, zIndex) {
 				const erase = noOverlapX || noOverlapY || !renderDestination || differentZ;
 
 				if (erase) {
-					manager.requestGhostDraw(0, 0, 0, eraseX, eraseY, this.id, bufferZ);
+					manager.requestGhostDrawNew(this.id, manager.point(0, 0, 0), eraseX, eraseY, bufferZ);
 					if (renderDestination && !noOverlapX && !noOverlapY) { // only happens when differentZ
 						const lookbackX = localX - (x - bufferX);
 						const lookbackY = localY - (y - bufferY);
 						const index = coordinateIndex(lookbackX, lookbackY);
-						const code = currentCodes.at(index);
-						const fg = currentFGs.at(index);
-						const bg = currentBGs.at(index);
-						manager.requestGhostDraw(code, fg, bg, eraseX, eraseY, this.id, zIndex);
+						const point = manager.point(
+							currentCodes.at(index),
+							currentFGs.at(index),
+							currentBGs.at(index)
+						);
+						manager.requestGhostDrawNew(this.id, point, eraseX, eraseY, zIndex);
 					}
 				}
 				if (renderDestination) {
 					const noDrawOverlapX = drawX < bufferX || drawX > bufferX + bufferWidth - 1;
 					const noDrawOverlapY = drawY < bufferY || drawY > bufferY + bufferHeight - 1;
 					if (!differentZ || (differentZ && (noDrawOverlapX || noDrawOverlapY))) {
-						const code = currentCodes.at(i);
-						const fg = currentFGs.at(i);
-						const bg = currentBGs.at(i);
-						manager.requestGhostDraw(code, fg, bg, drawX, drawY, this.id, zIndex);
+						const point = manager.point(
+							currentCodes.at(i),
+							currentFGs.at(i),
+							currentBGs.at(i)
+						);
+						manager.requestGhostDrawNew(this.id, point, drawX, drawY, zIndex);
 					}
 				} else {
 					currentCodes[i] = 0;
@@ -267,38 +306,7 @@ const DisplayBuffer = function(manager, x, y, width, height, zIndex) {
 	this.move = (x = null, y = null, zIndex = null) => move(true, x, y, zIndex);
 	this.quietMove = (x = null, y = null, zIndex = null) => move(false, x, y, zIndex);
 
-	// Changes only the screen construction, called by manager only
-	this.ghostRender = function() {
-		if (inConstruction && this.persistent) return; // only avoid erasing the buffer, not drawing the buffer (from its canvas)
-		if (!inConstruction && canvasEmpty) return;
-		inConstruction = false;
-		let i = 0;
-		do { // Loop through buffer
-			const code = canvasCodes.at(i);
-			const fg = canvasFGs.at(i);
-			const bg = canvasBGs.at(i);
-			canvasCodes[i] = 0;
-			canvasFGs[i] = 0;
-			canvasBGs[i] = 0;
-			const currentCode = currentCodes.at(i);
-			const currentFg = currentFGs.at(i);
-			const currentBg = currentBGs.at(i);
-			currentCodes[i] = code;
-			currentFGs[i] = fg;
-			currentBGs[i] = bg;
-
-			const screenX = bufferX + (i % bufferWidth);
-			const screenY = bufferY + Math.floor(i / bufferWidth);
-
-			let enteredConstruction = false;
-			if (code != currentCode || fg != currentFg || bg != currentBg)
-				enteredConstruction = manager.requestGhostDraw(code, fg, bg, screenX, screenY, this.id, bufferZ);
-			if (enteredConstruction && !inConstruction) inConstruction = true;
-
-			i++;
-		} while (i < bufferSize);
-		canvasEmpty = true;
-	}
+	// TODO: add centering functions that use the move function and the manager screen dimensions
 }
 
 module.exports = DisplayBuffer;
