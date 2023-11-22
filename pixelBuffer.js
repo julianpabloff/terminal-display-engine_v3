@@ -9,7 +9,6 @@ const PixelDisplayBuffer = function(manager, x, y, width, height, zIndex) {
 	this.zIndex = zIndex;
 	this.persistent = false;
 	this.pauseRenders = false;
-	// this.id = assigned by manager, don't change
 
 	// Private variables for internal reference
 	let bufferX = x;
@@ -20,6 +19,9 @@ const PixelDisplayBuffer = function(manager, x, y, width, height, zIndex) {
 	const bufferSize = width * height;
 	let canvasEmpty = true;
 	let inConstruction = false;
+
+	let bufferId; // gets assigned by manager after creation
+	this.assignId = id => bufferId = id;
 
 	const canvas = new Uint32Array(bufferSize);
 	const current = new Uint32Array(bufferSize);
@@ -122,7 +124,7 @@ const PixelDisplayBuffer = function(manager, x, y, width, height, zIndex) {
 		} while (i < gridHeight);
 	}
 	
-	// TODO
+	// TODO:
 	// this.drawAbsolute(color, screenGridX, screenGridY);
 	// this.drawAbsolute(color, count, screenGridX, screenGridY);
 	// this.drawAbsolute(colorArray, screenGridX, screenGridY);
@@ -133,39 +135,65 @@ const PixelDisplayBuffer = function(manager, x, y, width, height, zIndex) {
 		return this;
 	}
 
-	const topBlockCode = 9600;
-	const bottomBlockCode = 9604;
-	this.render = function(paint = false) {
+	// RENDERING
+
+	function setCurrent(top, bottom, topIndex, botIndex) {
+		canvas[topIndex] = canvas[botIndex] = 0;
+		current[topIndex] = top;
+		current[botIndex] = bottom;
+	}
+
+	function sendDrawRequest(top, bottom, botIndex) {
+		const x = botIndex % bufferWidth;
+		const y = Math.floor(botIndex / bufferWidth) - 1;
+		const screenX = bufferX + x;
+		const screenY = Math.floor((bufferY + y) / 2);
+		const pixel = manager.pixel(top, bottom);
+		manager.requestDrawNew(bufferId, pixel, screenX, screenY, bufferZ);
+	}
+
+	function render(bufferRowIndex, columnIndex) {
+		const topIndex = bufferRowIndex + columnIndex;
+		const botIndex = topIndex + bufferWidth;
+		const top = canvas[topIndex] | 0;
+		const bottom = canvas[botIndex] | 0;
+		const currentTop = current[topIndex] | 0;
+		const currentBottom = current[botIndex] | 0;
+		setCurrent(top, bottom, topIndex, botIndex);
+
+		if (top != currentTop || bottom != currentBottom)
+			sendDrawRequest(top, bottom, botIndex);
+	}
+
+	function paint(bufferRowIndex, columnIndex) {
+		const topIndex = bufferRowIndex + columnIndex;
+		const botIndex = topIndex + bufferWidth;
+		const currentTop = current[topIndex] | 0;
+		const currentBottom = current[botIndex] | 0;
+		const top = (canvas[topIndex] || currentTop) | 0
+		const bottom = (canvas[botIndex] || currentBottom) | 0;
+		setCurrent(top, bottom, topIndex, botIndex);
+
+		if (top != currentTop || bottom != currentBottom)
+			sendDrawRequest(top, bottom, botIndex);
+	}
+
+	function handleRender(renderFunction) {
 		if (manager.pauseRenders || this.pauseRenders) return;
 		let i = 0 - bufferWidth * (bufferY % 2);
 		do { // Loop through buffer
 			let j = 0;
-			do {
-				const topIndex = i + j;
-				const botIndex = topIndex + bufferWidth;
-				const top = canvas[topIndex] | 0;
-				const bottom = canvas[botIndex] | 0;
-				const currentTop = current[topIndex] | 0;
-				const currentBottom = current[botIndex] | 0;
-				canvas[topIndex] = canvas[botIndex] = 0;
-				current[topIndex] = top;
-				current[botIndex] = bottom;
-
-				if (top != currentTop || bottom != currentBottom) {
-					const x = botIndex % bufferWidth;
-					const y = Math.floor(botIndex / bufferWidth) - 1;
-					const screenX = bufferX + x;
-					const screenY = Math.floor((bufferY + y) / 2);
-					const pixel = manager.pixel(top, bottom);
-					manager.requestDrawNew(this.id, pixel, screenX, screenY, bufferZ);
-				}
+			do { // Loop through buffer double row (top & bottom)
+				renderFunction(i, j);
 				j++;
 			} while (j < bufferWidth);
 			i += bufferWidth * 2;
 		} while (i < bufferSize);
 		manager.executeRenderOutput();
 	}
-	this.paint = () => this.render(true);
+
+	this.render = () => handleRender(render);
+	this.paint = () => handleRender(paint);
 
 	this.ghostRender = function() {
 		if (!inConstruction && canvasEmpty) return;
@@ -192,7 +220,7 @@ const PixelDisplayBuffer = function(manager, x, y, width, height, zIndex) {
 					const screenY = Math.floor((bufferY + y) / 2);
 					const pixel = manager.pixel(top, bottom);
 					enteredConstruction =
-						manager.requestGhostDrawNew(this.id, pixel, screenX, screenY, bufferZ);
+						manager.requestGhostDrawNew(bufferId, pixel, screenX, screenY, bufferZ);
 				}
 				if (enteredConstruction && !inConstruction) inConstruction = true;
 				j++;

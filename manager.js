@@ -3,7 +3,7 @@ const PixelDisplayBuffer = require('./pixelBuffer.js');
 const Construction = require('./construction.js');
 const BufferTools = require('./bufferTools.js');
 
-	const BufferManager = function() {
+const BufferManager = function() {
 	// const constructionManager = new ConstructionManager();
 	const clearScreenString = '\x1b[0m\x1b[?25l\x1b[2J\x1b[3J\x1b[1;1H';
 	this.init = () => process.stdout.write(clearScreenString);
@@ -13,7 +13,8 @@ const BufferTools = require('./bufferTools.js');
 		let buffer;
 		if (pixel) buffer = new PixelDisplayBuffer(this, x, y, width, height, zIndex);
 		else buffer = new DisplayBuffer(this, x, y, width, height, zIndex);
-		buffer.id = createdBuffers.length;
+		buffer.assignId(createdBuffers.length);
+		// buffer.id = createdBuffers.length;
 		createdBuffers.push(buffer);
 		return buffer;
 	}.bind(this);

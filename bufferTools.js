@@ -127,6 +127,7 @@ const BufferTools = function(manager) {
 		for (let i = 1; i < buffer.height - 1; i++)
 		buffer.draw(sq.v, 0, i, color).draw(sq.v, buffer.end, i, color);
 		buffer.draw(sq.bl + sq.h.repeat(buffer.width - 2) + sq.br, 0, buffer.bottom, color);
+		buffer.cursorTo(0, 0);
 		return buffer;
 	}
 }
