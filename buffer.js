@@ -9,7 +9,6 @@ const DisplayBuffer = function(manager, x, y, width, height, zIndex) {
 	this.zIndex = zIndex;
 	this.persistent = false; // makes manager.massRender ignore this buffer, it won't disappear if not drawn to
 	this.pauseRenders = false;
-	// this.id = assigned by manager, don't change
 
 	// Private variables for internal reference
 	let bufferX = x;
@@ -20,6 +19,9 @@ const DisplayBuffer = function(manager, x, y, width, height, zIndex) {
 	const bufferSize = width * height;
 	let canvasEmpty = true;
 	let inConstruction = false;
+
+	let bufferId; // get assigned by manager after creation
+	this.assignId = id => bufferId = id;
 
 	// Just an idea, just more abstraction, would bring back this.show() and this.hide()
 	// this.hidden = false;
@@ -47,12 +49,14 @@ const DisplayBuffer = function(manager, x, y, width, height, zIndex) {
 		if (y < 0 || y >= bufferHeight) return null;
 		return (y * bufferWidth) + x;
 	}
+
 	let cursorIndex = 0;
 	this.cursorTo = (x, y) => {
 		const index = coordinateIndex(x, y);
 		if (index != null) cursorIndex = index;
 		return this;
 	}
+
 	this.centerWidth = width => Math.floor(bufferWidth / 2 - width / 2);
 	this.centerHeight = height => Math.floor(bufferHeight / 2 - height / 2);
 
@@ -76,6 +80,7 @@ const DisplayBuffer = function(manager, x, y, width, height, zIndex) {
 			inheritBG: inheritBG
 		}
 	}
+
 	this.write = function(string, fg = null, bg = null) {
 		const stringLength = string.length;
 		if (!stringLength) return this;
@@ -101,6 +106,7 @@ const DisplayBuffer = function(manager, x, y, width, height, zIndex) {
 		} while (i < stringLength);
 		return this;
 	}
+
 	this.draw = function(string, x, y, fg = null, bg = null) {
 		const stringLength = string.length;
 		if (!stringLength) return this;
@@ -121,6 +127,7 @@ const DisplayBuffer = function(manager, x, y, width, height, zIndex) {
 		} while (i < stringLength);
 		return this;
 	}
+
 	this.drawAbsolute = function(string, screenX, screenY, fg = null, bg = null) {
 		const temp = this.wrap;
 		this.wrap = false;
@@ -130,6 +137,7 @@ const DisplayBuffer = function(manager, x, y, width, height, zIndex) {
 		this.wrap = temp;
 		return this;
 	}
+
 	this.erase = function(x, y, count) {
 		let i = 0;
 		let index;
@@ -156,7 +164,7 @@ const DisplayBuffer = function(manager, x, y, width, height, zIndex) {
 
 	// Rendering
 	// TODO: What if instead of looping through the entire buffer, you stored the indeces
-	// that you need to check - the indeces width canvasCodes and the indeces with currentCodes
+	// that you need to check - the indeces with canvasCodes and the indeces with currentCodes
 	// that potentially need to be cleared
 	// const canvasIndeces = new Set();
 	// const currentIndeces = new Set();
@@ -194,7 +202,7 @@ const DisplayBuffer = function(manager, x, y, width, height, zIndex) {
 				const screenX = bufferX + (i % bufferWidth);
 				const screenY = bufferY + Math.floor(i / bufferWidth);
 				const point = manager.point(code, fg, bg);
-				enteredConstruction = manager.requestDrawNew(this.id, point, screenX, screenY, bufferZ);
+				enteredConstruction = manager.requestDrawNew(bufferId, point, screenX, screenY, bufferZ);
 			}
 			if (enteredConstruction && !inConstruction) inConstruction = true;
 			i++;
@@ -230,7 +238,7 @@ const DisplayBuffer = function(manager, x, y, width, height, zIndex) {
 				const screenY = bufferY + Math.floor(i / bufferWidth);
 				const point = manager.point(code, fg, bg);
 				enteredConstruction =
-					manager.requestGhostDrawNew(this.id, point, screenX, screenY, bufferZ);
+					manager.requestGhostDrawNew(bufferId, point, screenX, screenY, bufferZ);
 			}
 			if (enteredConstruction && !inConstruction) inConstruction = true;
 			i++;
@@ -263,7 +271,7 @@ const DisplayBuffer = function(manager, x, y, width, height, zIndex) {
 				const erase = noOverlapX || noOverlapY || !renderDestination || differentZ;
 
 				if (erase) {
-					manager.requestGhostDrawNew(this.id, manager.point(0, 0, 0), eraseX, eraseY, bufferZ);
+					manager.requestGhostDrawNew(bufferId, manager.point(0, 0, 0), eraseX, eraseY, bufferZ);
 					if (renderDestination && !noOverlapX && !noOverlapY) { // only happens when differentZ
 						const lookbackX = localX - (x - bufferX);
 						const lookbackY = localY - (y - bufferY);
@@ -273,7 +281,7 @@ const DisplayBuffer = function(manager, x, y, width, height, zIndex) {
 							currentFGs.at(index),
 							currentBGs.at(index)
 						);
-						manager.requestGhostDrawNew(this.id, point, eraseX, eraseY, zIndex);
+						manager.requestGhostDrawNew(bufferId, point, eraseX, eraseY, zIndex);
 					}
 				}
 				if (renderDestination) {
@@ -285,7 +293,7 @@ const DisplayBuffer = function(manager, x, y, width, height, zIndex) {
 							currentFGs.at(i),
 							currentBGs.at(i)
 						);
-						manager.requestGhostDrawNew(this.id, point, drawX, drawY, zIndex);
+						manager.requestGhostDrawNew(bufferId, point, drawX, drawY, zIndex);
 					}
 				} else {
 					currentCodes[i] = 0;

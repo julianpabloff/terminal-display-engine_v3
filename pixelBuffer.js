@@ -122,6 +122,7 @@ const PixelDisplayBuffer = function(manager, x, y, width, height, zIndex) {
 			} while (j < rowWidth);
 			i++;
 		} while (i < gridHeight);
+		return this;
 	}
 	
 	// TODO:

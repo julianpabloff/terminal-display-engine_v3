@@ -279,7 +279,6 @@ const BufferManager = function() {
 		const determinedOutput = construction.determineOutput();
 		requestRender(determinedOutput, x, y);
 		return inConstruction;
-		return false;
 	}
 
 	// TODO: Account for pixels

@@ -1,13 +1,59 @@
+const getOpacity = code => code >> 24;
+const getHex = code => code & 0xffffff;
+
+const RGBA = function(r, g, b, a) {
+	this.r = r; this.g = g; this.b = b; this.a = a;
+}
+
+const getRGBA = color => {
+	const hex = getHex(color);
+	return new RGBA(hex >> 16, (hex >> 8) & 0xff, hex & 0xff, color >> 24);
+};
+
+const setRGBA = rgba =>
+	(Math.round(rgba.a) << 24) +
+	(Math.round(rgba.r) << 16) +
+	(Math.round(rgba.g) << 8) +
+	Math.round(rgba.b);
+
+const emptyRGBA = new RGBA(0, 0, 0, 0);
+
+const layerColorsRGBA = (topRGBA, botRGBA) => {
+	const opacity = topRGBA.a;
+	if (!opacity) return botRGBA;
+	if (opacity > 99) return topRGBA;
+	const calcOpacityDelta = (top, bottom) => (bottom - top) * (100 - opacity) / 100;
+	return new RGBA(
+		topRGBA.r + calcOpacityDelta(topRGBA.r, botRGBA.r),
+		topRGBA.g + calcOpacityDelta(topRGBA.g, botRGBA.g),
+		topRGBA.b + calcOpacityDelta(topRGBA.b, botRGBA.b),
+		100
+	);
+}
+
+const blurRGBA = (RGBA1, RGBA2) => {
+	if (!RGBA1.a) return RGBA2;
+	if (!RGBA2.a) return RGBA1;
+	return new RGBA(
+		(RGBA1.r + RGBA2.r) / 2,
+		(RGBA1.g + RGBA2.g) / 2,
+		(RGBA1.b + RGBA2.b) / 2,
+		(RGBA1.a + RGBA2.a) / 2,
+	);
+}
+
 const Node = function(id, index, data) {
 	this.id = id;
 	this.index = index;
 	this.data = data;
 	this.next = null;
 }
+
 const Construction = function() {
 	const addedIDs = new Set();
 	let start = { next: null };
 	this.length = 0;
+
 	this.addSorted = function(id, index, data) {
 		const newNode = new Node(id, index, data);
 		let runner = start;
@@ -43,6 +89,7 @@ const Construction = function() {
 		addedIDs.add(id);
 		this.length++;
 	}
+
 	this.deleteById = function(id) {
 		let runner = start;
 		while (runner.next) {
@@ -55,6 +102,7 @@ const Construction = function() {
 			runner = runner.next;
 		}
 	}
+
 	this.findById = function(id) {
 		let runner = start;
 		while (runner.next) {
@@ -65,9 +113,9 @@ const Construction = function() {
 		}
 		return false;
 	}
-	this.has = function(id) {
-		return addedIDs.has(id);
-	}
+
+	this.has = id => addedIDs.has(id);
+
 	this.forEach = function(callback) {
 		let runner = start;
 		let index = 0;
@@ -78,48 +126,8 @@ const Construction = function() {
 		}
 	}
 
-	const getOpacity = code => code >> 24;
-	const getHex = code => code & 0xffffff;
-
-	const RGBA = function(r, g, b, a) {
-		this.r = r; this.g = g; this.b = b; this.a = a;
-	}
-	const getRGBA = color => {
-		const hex = getHex(color);
-		return new RGBA(hex >> 16, (hex >> 8) & 0xff, hex & 0xff, color >> 24);
-	};
-	const setRGBA = rgba =>
-		(Math.round(rgba.a) << 24) +
-		(Math.round(rgba.r) << 16) +
-		(Math.round(rgba.g) << 8) +
-		Math.round(rgba.b);
-	const emptyRGBA = new RGBA(0, 0, 0, 0);
-
-	const layerColorsRGBA = (topRGBA, botRGBA) => {
-		const opacity = topRGBA.a;
-		if (!opacity) return botRGBA;
-		if (opacity > 99) return topRGBA;
-		const calcOpacityDelta = (top, bottom) => (bottom - top) * (100 - opacity) / 100;
-		return new RGBA(
-			topRGBA.r + calcOpacityDelta(topRGBA.r, botRGBA.r),
-			topRGBA.g + calcOpacityDelta(topRGBA.g, botRGBA.g),
-			topRGBA.b + calcOpacityDelta(topRGBA.b, botRGBA.b),
-			100
-		);
-	}
-	const blurRGBA = (RGBA1, RGBA2) => {
-		if (!RGBA1.a) return RGBA2;
-		if (!RGBA2.a) return RGBA1;
-		return new RGBA(
-			(RGBA1.r + RGBA2.r) / 2,
-			(RGBA1.g + RGBA2.g) / 2,
-			(RGBA1.b + RGBA2.b) / 2,
-			(RGBA1.a + RGBA2.a) / 2,
-		);
-	}
-
-	this.charOnPixelMethod = 'blur';
-	this.determineOutput = function(debug) {
+	this.charOnPixelSolution = 'blur';
+	this.determineOutput = function(debug = false) {
 		let outputCode = 32;
 		let outputFg = 0;
 		let outputBg = 0;
@@ -130,7 +138,7 @@ const Construction = function() {
 		const botHalfStack = new Uint32Array(stackHeight);
 
 		const calcBgRGBA = bg => {
-			switch (this.charOnPixelMethod) {
+			switch (this.charOnPixelSolution) {
 				case 'blur' : return layerColorsRGBA(getRGBA(bg), blurRGBA(topRGBA, botRGBA));
 				case 'top' : return layerColorsRGBA(getRGBA(bg), topRGBA);
 				case 'bottom' : return layerColorsRGBA(getRGBA(bg), botRGBA);
@@ -213,7 +221,15 @@ const Construction = function() {
 			outputFg = setRGBA(fgRGBA);
 			outputBg = setRGBA(bgRGBA);
 		}
-		if (false) {
+
+		return {
+			code: outputCode,
+			fg: outputFg,
+			bg: outputBg
+		}
+
+		/*
+		if (debug) {
 			process.stdout.cursorTo(debug.x, debug.y);
 			console.log('\n');
 			debugThis();
@@ -227,11 +243,7 @@ const Construction = function() {
 			console.log('OUTPUT: code', outputCode, 'fg', hexDebugString(outputFg), 'bg', hexDebugString(outputBg));
 			console.log();
 		}
-		return {
-			code: outputCode,
-			fg: outputFg,
-			bg: outputBg
-		}
+		*/
 	}
 
 	// IN THIS SCENARIO...
